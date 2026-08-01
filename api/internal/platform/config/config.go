@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -16,6 +17,10 @@ type Config struct {
 	DatabaseURL string
 	AutoMigrate bool
 	Seed        bool
+
+	JWTSecret            string
+	JWTTTL               time.Duration
+	AdminBootstrapPassword string
 }
 
 func Load() Config {
@@ -30,13 +35,18 @@ func Load() Config {
 		"http://localhost:5175",
 	}
 
+	ttlHours := getenvInt("JWT_TTL_HOURS", 24)
+
 	return Config{
-		HTTPAddr:    addr,
-		Env:         env,
-		CORSOrigins: origins,
-		DatabaseURL: buildDatabaseURL(),
-		AutoMigrate: getenvBool("DB_AUTO_MIGRATE", true),
-		Seed:        getenvBool("DB_SEED", true),
+		HTTPAddr:               addr,
+		Env:                    env,
+		CORSOrigins:            origins,
+		DatabaseURL:            buildDatabaseURL(),
+		AutoMigrate:            getenvBool("DB_AUTO_MIGRATE", true),
+		Seed:                   getenvBool("DB_SEED", true),
+		JWTSecret:              getenv("JWT_SECRET", "ecomerce-dev-jwt-secret-change-me"),
+		JWTTTL:                 time.Duration(ttlHours) * time.Hour,
+		AdminBootstrapPassword: getenv("ADMIN_BOOTSTRAP_PASSWORD", "Admin@123456"),
 	}
 }
 
@@ -72,4 +82,16 @@ func getenvBool(key string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+func getenvInt(key string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
 }

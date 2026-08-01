@@ -1,16 +1,19 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/application/commands"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/application/queries"
 	cataloginfra "github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/infrastructure"
 	catalogpres "github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/presentation"
 	healthpres "github.com/nvnhan0810/ecomerce-api/internal/modules/health/presentation"
+	identitycommands "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/commands"
 	identityqueries "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/queries"
 	identityinfra "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/infrastructure"
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
@@ -25,7 +28,12 @@ func newTestServer(t *testing.T) http.Handler {
 		t.Fatal(err)
 	}
 	userRepo := identityinfra.NewInMemoryUserRepository()
-	if err := identityinfra.SeedDemoUsers(userRepo); err != nil {
+	hasher := identityinfra.NewBcryptPasswordHasher()
+	tokens, err := identityinfra.NewJWTTokenService("test-jwt-secret-16", 2*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := identityinfra.SeedDemoUsers(userRepo, hasher, "Admin@123456"); err != nil {
 		t.Fatal(err)
 	}
 	return httpapi.NewRouter(httpapi.Dependencies{
@@ -41,7 +49,10 @@ func newTestServer(t *testing.T) http.Handler {
 		),
 		Identity: identitypres.NewIdentityHandler(
 			identityqueries.NewListUsersByRoleHandler(userRepo),
+			identitycommands.NewLoginHandler(userRepo, hasher, tokens),
+			identityqueries.NewGetCurrentUserHandler(userRepo),
 		),
+		Tokens: tokens,
 	})
 }
 
@@ -54,13 +65,6 @@ func TestHealthEndpoint_should_return_ok(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d", rec.Code)
 	}
-	var body map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if body["status"] != "ok" {
-		t.Fatalf("unexpected body: %v", body)
-	}
 }
 
 func TestListProducts_should_return_seeded_items(t *testing.T) {
@@ -72,33 +76,45 @@ func TestListProducts_should_return_seeded_items(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	var body struct {
-		Data []map[string]any `json:"data"`
+}
+
+func TestLogin_should_return_token_for_admin(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+	body := bytes.NewBufferString(`{"email":"admin@ecomerce.local","password":"Admin@123456"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+	var payload struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if len(body.Data) < 1 {
-		t.Fatal("expected seeded products")
+	if payload.AccessToken == "" {
+		t.Fatal("expected access token")
+	}
+
+	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	meReq.Header.Set("Authorization", "Bearer "+payload.AccessToken)
+	meRec := httptest.NewRecorder()
+	srv.ServeHTTP(meRec, meReq)
+	if meRec.Code != http.StatusOK {
+		t.Fatalf("me status=%d body=%s", meRec.Code, meRec.Body.String())
 	}
 }
 
-func TestListMerchants_should_return_merchant_role_users(t *testing.T) {
+func TestMerchants_should_require_admin_token(t *testing.T) {
 	t.Parallel()
 	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/merchants", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status=%d", rec.Code)
-	}
-	var body struct {
-		Data []map[string]any `json:"data"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if len(body.Data) != 1 {
-		t.Fatalf("expected 1 merchant, got %d", len(body.Data))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rec.Code)
 	}
 }

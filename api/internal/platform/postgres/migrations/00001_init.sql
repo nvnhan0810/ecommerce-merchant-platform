@@ -1,4 +1,6 @@
--- +migrate Up
+-- +goose Up
+DROP TABLE IF EXISTS schema_migrations;
+
 CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY,
     merchant_id TEXT NOT NULL DEFAULT '',
@@ -21,3 +23,9 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_users_role;
+DROP INDEX IF EXISTS idx_products_created_at;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS products;

@@ -9,6 +9,7 @@ import (
 
 	catalogpres "github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/presentation"
 	healthpres "github.com/nvnhan0810/ecomerce-api/internal/modules/health/presentation"
+	"github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/config"
 )
@@ -18,6 +19,7 @@ type Dependencies struct {
 	Health   *healthpres.HealthHandler
 	Catalog  *catalogpres.CatalogHandler
 	Identity *identitypres.IdentityHandler
+	Tokens   domain.TokenService
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -40,8 +42,16 @@ func NewRouter(deps Dependencies) http.Handler {
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Get("/products", deps.Catalog.ListProducts)
 		api.Post("/products", deps.Catalog.CreateProduct)
-		api.Get("/merchants", deps.Identity.ListMerchants)
-		api.Get("/users", deps.Identity.ListUsers)
+
+		api.Post("/auth/login", deps.Identity.Login)
+
+		api.Group(func(admin chi.Router) {
+			admin.Use(BearerAuth(deps.Tokens))
+			admin.Use(RequireAdmin)
+			admin.Get("/auth/me", deps.Identity.Me)
+			admin.Get("/merchants", deps.Identity.ListMerchants)
+			admin.Get("/users", deps.Identity.ListUsers)
+		})
 	})
 
 	return r

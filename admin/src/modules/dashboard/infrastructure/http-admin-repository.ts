@@ -3,6 +3,7 @@ import {
   MerchantAccount,
   type AdminRepository,
 } from '../../dashboard/domain/overview'
+import { apiFetch } from '@/shared/http'
 
 type UserApiItem = {
   id: string
@@ -11,15 +12,11 @@ type UserApiItem = {
   role: string
 }
 
-function apiBaseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || ''
-}
-
 export class HttpAdminRepository implements AdminRepository {
   async loadOverview(): Promise<AdminOverview> {
     const [usersRes, merchantsRes] = await Promise.all([
-      fetch(`${apiBaseUrl()}/api/v1/users`),
-      fetch(`${apiBaseUrl()}/api/v1/merchants`),
+      apiFetch('/api/v1/users'),
+      apiFetch('/api/v1/merchants'),
     ])
     if (!usersRes.ok || !merchantsRes.ok) {
       throw new Error('Failed to load admin overview')
@@ -30,7 +27,7 @@ export class HttpAdminRepository implements AdminRepository {
   }
 
   async listMerchants(): Promise<MerchantAccount[]> {
-    const res = await fetch(`${apiBaseUrl()}/api/v1/merchants`)
+    const res = await apiFetch('/api/v1/merchants')
     if (!res.ok) {
       throw new Error(`Failed to load merchants (${res.status})`)
     }
