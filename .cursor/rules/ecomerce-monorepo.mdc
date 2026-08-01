@@ -1,0 +1,21 @@
+---
+description: Ecomerce monorepo — 4 sources, domains, Clean Arch / DDD
+alwaysApply: true
+---
+
+# Ecomerce monorepo rules
+
+Repo layout (do not merge FE apps into one SPA):
+
+- `web/` — React user storefront → `ecomerce.nvnhan0810.com`
+- `merchant/` — Vue merchant → `ecomerce-merchant.nvnhan0810.com`
+- `admin/` — Vue admin → `ecomerce-admin.nvnhan0810.com`
+- `api/` — Go API → `ecomerce-api.nvnhan0810.com`
+
+Follow global Cursor standards:
+
+- Frontend Clean Architecture (`modules/<feature>/{domain,application,infrastructure,presentation}`)
+- Backend DDD + CQRS with the same module layout
+- No business logic in React/Vue components or Go HTTP handlers
+- No `any` in TypeScript; keep `strict: true`
+- Add/update tests with every feature change
