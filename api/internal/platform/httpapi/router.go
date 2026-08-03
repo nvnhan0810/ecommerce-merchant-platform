@@ -55,6 +55,10 @@ func NewRouter(deps Dependencies) http.Handler {
 			admin.Put("/merchants/{id}", deps.Identity.UpdateMerchant)
 			admin.Delete("/merchants/{id}", deps.Identity.DeleteMerchant)
 			admin.Get("/users", deps.Identity.ListUsers)
+			admin.Post("/users", deps.Identity.CreateUser)
+			admin.Get("/users/{id}", deps.Identity.GetUser)
+			admin.Put("/users/{id}", deps.Identity.UpdateUser)
+			admin.Delete("/users/{id}", deps.Identity.DeleteUser)
 		})
 	})
 

@@ -20,6 +20,7 @@ function logout(): void {
       <RouterLink class="brand" to="/">Ecomerce Admin</RouterLink>
       <nav aria-label="Admin">
         <RouterLink to="/">Overview</RouterLink>
+        <RouterLink to="/users">Users</RouterLink>
         <RouterLink to="/merchants">Merchants</RouterLink>
       </nav>
       <div class="footer">
@@ -73,7 +74,7 @@ nav a {
   border-radius: 8px;
 }
 
-nav a.router-link-active,
+nav a.router-link-exact-active,
 nav a:hover {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
