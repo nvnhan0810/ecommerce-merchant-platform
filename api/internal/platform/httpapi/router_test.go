@@ -17,6 +17,7 @@ import (
 	identityqueries "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/queries"
 	identityinfra "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/infrastructure"
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
+	orderinginfra "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/infrastructure"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/config"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/httpapi"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/seed"
@@ -34,7 +35,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := seed.RunDemo(users, merchants, admins, productRepo, hasher, "Admin@123456"); err != nil {
+	if err := seed.RunDemo(users, merchants, admins, productRepo, orderinginfra.NewInMemoryOrderRepository(), hasher, "Admin@123456"); err != nil {
 		t.Fatal(err)
 	}
 	checker := cataloginfra.NewAccountMerchantChecker(merchants)

@@ -18,6 +18,7 @@ import (
 	identityqueries "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/queries"
 	identityinfra "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/infrastructure"
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
+	orderinginfra "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/infrastructure"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/config"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/envfile"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/httpapi"
@@ -45,6 +46,7 @@ func main() {
 	}
 
 	productRepo := cataloginfra.NewPostgresProductRepository(pool)
+	orderRepo := orderinginfra.NewPostgresOrderRepository(pool)
 	userRepo := identityinfra.NewPostgresUserRepository(pool)
 	merchantRepo := identityinfra.NewPostgresMerchantRepository(pool)
 	adminRepo := identityinfra.NewPostgresAdminRepository(pool)
@@ -55,7 +57,7 @@ func main() {
 	}
 
 	if cfg.Seed {
-		if err := seed.RunDemo(userRepo, merchantRepo, adminRepo, productRepo, hasher, cfg.AdminBootstrapPassword); err != nil {
+		if err := seed.RunDemo(userRepo, merchantRepo, adminRepo, productRepo, orderRepo, hasher, cfg.AdminBootstrapPassword); err != nil {
 			log.Fatalf("seed: %v", err)
 		}
 	}

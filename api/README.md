@@ -68,6 +68,7 @@ make migrate-refresh
 make seed
 # hoặc chỉ products (sau khi đã có merchants):
 make seed-products
+make seed-orders
 ```
 
 Tương đương:
@@ -77,6 +78,7 @@ cd api
 DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/migrate refresh
 DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed
 DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed products
+DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed orders
 ```
 
 ### Demo seeder
@@ -89,7 +91,7 @@ DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed products
 | merchant | `shop@`, `fashion@`, `tech@`, `home@ecomerce.local` | `Shop@123456` |
 | user | `buyer@`, `an@`, `binh@`, `chi@ecomerce.local` | `Buyer@123456` |
 
-Plus **20** demo products (5 / merchant) gắn `merchant_id` thật.  
-`make seed-products` chỉ seed catalog. API boot với `DB_SEED=true` cũng gọi cùng seeder.
+Plus **20** demo products (5 / merchant) gắn `merchant_id` thật, và **7** demo orders (mỗi trạng thái một đơn: `new` / `paid` / `confirmed` / `shipping` / `succeeded` / `failed` / `cancelled`). Mỗi order có `code` unique 10 ký tự A–Z/0–9 để tracking, thuộc 1 user + 1 merchant; line items chỉ lấy sản phẩm của merchant đó.  
+`make seed-products` / `make seed-orders` seed riêng từng phần. API boot với `DB_SEED=true` cũng gọi cùng seeder.
 
 > GIN là HTTP framework, không dùng để migrate. Stack hiện tại giữ Chi + Goose.

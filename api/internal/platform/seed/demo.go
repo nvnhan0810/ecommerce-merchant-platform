@@ -8,12 +8,15 @@ import (
 	cataloginfra "github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/infrastructure"
 	identitydomain "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
 	identityinfra "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/infrastructure"
+	orderingdomain "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/domain"
+	orderinginfra "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/infrastructure"
 )
 
-// RunDemo seeds identity + catalog demo data. Safe to re-run (idempotent by email / merchant+name).
+// RunDemo seeds identity + catalog + orders demo data. Safe to re-run (idempotent).
 func RunDemo(
 	users, merchants, admins identitydomain.AccountRepository,
 	products domain.ProductRepository,
+	orders orderingdomain.OrderRepository,
 	hasher identitydomain.PasswordHasher,
 	adminPassword string,
 ) error {
@@ -23,6 +26,9 @@ func RunDemo(
 	if err := RunProducts(products, merchants); err != nil {
 		return err
 	}
+	if err := RunOrders(orders, users, merchants, products); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -30,6 +36,18 @@ func RunDemo(
 func RunProducts(products domain.ProductRepository, merchants identitydomain.AccountRepository) error {
 	if err := cataloginfra.SeedDemoProducts(products, merchants); err != nil {
 		return fmt.Errorf("products: %w", err)
+	}
+	return nil
+}
+
+// RunOrders seeds demo orders (user + merchant + products of that merchant).
+func RunOrders(
+	orders orderingdomain.OrderRepository,
+	users, merchants identitydomain.AccountRepository,
+	products domain.ProductRepository,
+) error {
+	if err := orderinginfra.SeedDemoOrders(orders, users, merchants, products); err != nil {
+		return fmt.Errorf("orders: %w", err)
 	}
 	return nil
 }
@@ -45,4 +63,5 @@ func LogSummary(adminPassword string) {
 	log.Println("  merchant  shop@ecomerce.local / Shop@123456 (+ fashion/tech/home)")
 	log.Println("  user      buyer@ecomerce.local / Buyer@123456 (+ an/binh/chi)")
 	log.Printf("  products  %d demo SKUs across shop/fashion/tech/home", len(cataloginfra.DemoProducts()))
+	log.Println("  orders    7 demo orders with tracking codes (new/paid/confirmed/shipping/succeeded/failed/cancelled)")
 }
