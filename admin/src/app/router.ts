@@ -4,6 +4,9 @@ import OverviewPanel from '@/modules/dashboard/presentation/OverviewPanel.vue'
 import MerchantList from '@/modules/merchants/presentation/MerchantList.vue'
 import UserList from '@/modules/users/presentation/UserList.vue'
 import ProductList from '@/modules/products/presentation/ProductList.vue'
+import ProductCreate from '@/modules/products/presentation/ProductCreate.vue'
+import ProductEdit from '@/modules/products/presentation/ProductEdit.vue'
+import ProductShow from '@/modules/products/presentation/ProductShow.vue'
 import LoginPage from '@/modules/auth/presentation/LoginPage.vue'
 import { GetStoredSessionUseCase } from '@/modules/auth/application/auth-use-cases'
 import { LocalStorageSessionStore } from '@/modules/auth/infrastructure/local-storage-session-store'
@@ -27,6 +30,9 @@ export const router = createRouter({
         { path: 'users', component: UserList },
         { path: 'merchants', component: MerchantList },
         { path: 'products', component: ProductList },
+        { path: 'products/new', component: ProductCreate },
+        { path: 'products/:id/edit', component: ProductEdit },
+        { path: 'products/:id', component: ProductShow },
       ],
     },
   ],

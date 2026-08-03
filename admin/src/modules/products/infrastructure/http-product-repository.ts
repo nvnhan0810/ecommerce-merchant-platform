@@ -4,7 +4,7 @@ import {
   type ProductRepository,
   type UpdateProductInput,
 } from '../domain/product'
-import { apiFetch } from '@/shared/http'
+import { apiFetch, getAccessToken } from '@/shared/http'
 
 type ProductApiItem = {
   id: string
@@ -14,6 +14,8 @@ type ProductApiItem = {
   price_cents: number
   currency: string
   stock: number
+  image_key?: string
+  image_url?: string
 }
 
 function mapProduct(item: ProductApiItem): Product {
@@ -25,6 +27,8 @@ function mapProduct(item: ProductApiItem): Product {
     item.price_cents,
     item.currency,
     item.stock,
+    item.image_key ?? '',
+    item.image_url ?? '',
   )
 }
 
@@ -51,6 +55,10 @@ function toBody(input: CreateProductInput) {
   }
 }
 
+function apiBase(): string {
+  return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || ''
+}
+
 export class HttpProductRepository implements ProductRepository {
   async list(): Promise<Product[]> {
     const res = await apiFetch('/api/v1/products?limit=200')
@@ -59,6 +67,15 @@ export class HttpProductRepository implements ProductRepository {
     }
     const body = (await res.json()) as { data: ProductApiItem[] }
     return body.data.map(mapProduct)
+  }
+
+  async getById(id: string): Promise<Product> {
+    const res = await apiFetch(`/api/v1/products/${id}`)
+    if (!res.ok) {
+      throw new Error(await readError(res))
+    }
+    const body = (await res.json()) as { data: ProductApiItem }
+    return mapProduct(body.data)
   }
 
   async create(input: CreateProductInput): Promise<Product> {
@@ -90,5 +107,34 @@ export class HttpProductRepository implements ProductRepository {
     if (!res.ok) {
       throw new Error(await readError(res))
     }
+  }
+
+  async uploadImage(id: string, file: File): Promise<Product> {
+    const form = new FormData()
+    form.append('file', file)
+    const headers = new Headers()
+    const token = getAccessToken()
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
+    }
+    const res = await fetch(`${apiBase()}/api/v1/products/${id}/image`, {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+    if (!res.ok) {
+      throw new Error(await readError(res))
+    }
+    const body = (await res.json()) as { data: ProductApiItem }
+    return mapProduct(body.data)
+  }
+
+  async removeImage(id: string): Promise<Product> {
+    const res = await apiFetch(`/api/v1/products/${id}/image`, { method: 'DELETE' })
+    if (!res.ok) {
+      throw new Error(await readError(res))
+    }
+    const body = (await res.json()) as { data: ProductApiItem }
+    return mapProduct(body.data)
   }
 }
