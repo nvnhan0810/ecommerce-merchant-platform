@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { computed } from 'vue'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { GetStoredSessionUseCase, LogoutUseCase } from '@/modules/auth/application/auth-use-cases'
+import { LocalStorageSessionStore } from '@/modules/auth/infrastructure/local-storage-session-store'
+
+const router = useRouter()
+const store = new LocalStorageSessionStore()
+const session = computed(() => new GetStoredSessionUseCase(store).execute())
+
+function logout(): void {
+  new LogoutUseCase(store).execute()
+  void router.replace('/login')
+}
 </script>
 
 <template>
@@ -10,6 +22,10 @@ import { RouterLink, RouterView } from 'vue-router'
         <RouterLink to="/">Overview</RouterLink>
         <RouterLink to="/merchants">Merchants</RouterLink>
       </nav>
+      <div class="footer">
+        <p v-if="session" class="user">{{ session.displayName }}</p>
+        <button type="button" @click="logout">Đăng xuất</button>
+      </div>
     </aside>
     <main>
       <RouterView />
@@ -47,6 +63,7 @@ nav {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex: 1;
 }
 
 nav a {
@@ -62,6 +79,32 @@ nav a:hover {
   color: #fff;
 }
 
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.user {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+button {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 main {
   padding: 1.75rem 1.5rem;
 }
@@ -75,10 +118,12 @@ main {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
   }
 
   nav {
     flex-direction: row;
+    flex: initial;
   }
 }
 </style>

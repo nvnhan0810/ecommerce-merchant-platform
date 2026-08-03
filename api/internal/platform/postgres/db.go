@@ -2,13 +2,14 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"fmt"
-	"sort"
-	"strings"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pressly/goose/v3"
 )
 
 //go:embed migrations/*.sql
@@ -36,56 +37,85 @@ func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	if _, err := pool.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
-			filename TEXT PRIMARY KEY,
-			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)
-	`); err != nil {
-		return fmt.Errorf("ensure schema_migrations: %w", err)
-	}
-
-	entries, err := migrationFS.ReadDir("migrations")
+func openSQL(databaseURL string) (*sql.DB, error) {
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(5)
+	db.SetConnMaxLifetime(30 * time.Minute)
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+func withGoose(databaseURL string, fn func(db *sql.DB) error) error {
+	db, err := openSQL(databaseURL)
+	if err != nil {
+		return fmt.Errorf("open sql: %w", err)
+	}
+	defer db.Close()
+
+	goose.SetBaseFS(migrationFS)
+	if err := goose.SetDialect("postgres"); err != nil {
 		return err
 	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
-			continue
-		}
-		names = append(names, e.Name())
-	}
-	sort.Strings(names)
+	return fn(db)
+}
 
-	for _, name := range names {
-		var exists bool
-		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE filename = $1)`, name).Scan(&exists); err != nil {
-			return err
+// Migrate applies all pending Up migrations (used by API boot when DB_AUTO_MIGRATE=true).
+func Migrate(_ context.Context, databaseURL string) error {
+	return Up(databaseURL)
+}
+
+func Up(databaseURL string) error {
+	return withGoose(databaseURL, func(db *sql.DB) error {
+		return goose.Up(db, "migrations")
+	})
+}
+
+func Down(databaseURL string) error {
+	return withGoose(databaseURL, func(db *sql.DB) error {
+		return goose.Down(db, "migrations")
+	})
+}
+
+func DownTo(databaseURL string, version int64) error {
+	return withGoose(databaseURL, func(db *sql.DB) error {
+		return goose.DownTo(db, "migrations", version)
+	})
+}
+
+// Refresh rolls back every migration then re-applies all Up scripts.
+func Refresh(databaseURL string) error {
+	return withGoose(databaseURL, func(db *sql.DB) error {
+		if err := goose.DownTo(db, "migrations", 0); err != nil {
+			return fmt.Errorf("refresh down: %w", err)
 		}
-		if exists {
-			continue
+		if err := goose.Up(db, "migrations"); err != nil {
+			return fmt.Errorf("refresh up: %w", err)
 		}
-		body, err := migrationFS.ReadFile("migrations/" + name)
+		return nil
+	})
+}
+
+func Status(databaseURL string) error {
+	return withGoose(databaseURL, func(db *sql.DB) error {
+		return goose.Status(db, "migrations")
+	})
+}
+
+func Version(databaseURL string) (int64, error) {
+	var version int64
+	err := withGoose(databaseURL, func(db *sql.DB) error {
+		v, err := goose.GetDBVersion(db)
 		if err != nil {
 			return err
 		}
-		tx, err := pool.Begin(ctx)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, string(body)); err != nil {
-			_ = tx.Rollback(ctx)
-			return fmt.Errorf("migrate %s: %w", name, err)
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (filename) VALUES ($1)`, name); err != nil {
-			_ = tx.Rollback(ctx)
-			return err
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
+		version = v
+		return nil
+	})
+	return version, err
 }

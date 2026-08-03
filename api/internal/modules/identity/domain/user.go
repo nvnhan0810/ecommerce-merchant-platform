@@ -9,9 +9,13 @@ import (
 )
 
 var (
-	ErrInvalidEmail = errors.New("email is required")
-	ErrInvalidRole  = errors.New("role must be user, merchant, or admin")
-	ErrUserNotFound = errors.New("user not found")
+	ErrInvalidEmail         = errors.New("email is required")
+	ErrInvalidRole          = errors.New("role must be user, merchant, or admin")
+	ErrUserNotFound         = errors.New("user not found")
+	ErrInvalidCredentials   = errors.New("invalid email or password")
+	ErrForbiddenRole        = errors.New("user role is not allowed")
+	ErrPasswordNotSet       = errors.New("password is not set for this account")
+	ErrWeakPassword         = errors.New("password must be at least 8 characters")
 )
 
 type Role string
@@ -37,12 +41,18 @@ func NewUserID() UserID {
 	return UserID(uuid.NewString())
 }
 
+type PasswordHasher interface {
+	Hash(plain string) (string, error)
+	Compare(hash, plain string) error
+}
+
 type User struct {
-	ID        UserID
-	Email     string
-	DisplayName string
-	Role      Role
-	CreatedAt time.Time
+	ID           UserID
+	Email        string
+	DisplayName  string
+	Role         Role
+	PasswordHash string
+	CreatedAt    time.Time
 }
 
 func NewUser(email, displayName string, role Role) (User, error) {
@@ -59,8 +69,49 @@ func NewUser(email, displayName string, role Role) (User, error) {
 	}, nil
 }
 
+func (u *User) SetPassword(hasher PasswordHasher, plain string) error {
+	if len(plain) < 8 {
+		return ErrWeakPassword
+	}
+	hash, err := hasher.Hash(plain)
+	if err != nil {
+		return err
+	}
+	u.PasswordHash = hash
+	return nil
+}
+
+func (u User) Authenticate(hasher PasswordHasher, plain string) error {
+	if strings.TrimSpace(u.PasswordHash) == "" {
+		return ErrPasswordNotSet
+	}
+	if err := hasher.Compare(u.PasswordHash, plain); err != nil {
+		return ErrInvalidCredentials
+	}
+	return nil
+}
+
+func (u User) RequireRole(role Role) error {
+	if u.Role != role {
+		return ErrForbiddenRole
+	}
+	return nil
+}
+
 type UserRepository interface {
 	Save(user User) error
 	FindByEmail(email string) (User, error)
+	FindByID(id UserID) (User, error)
 	ListByRole(role Role) ([]User, error)
+}
+
+type TokenClaims struct {
+	UserID UserID
+	Email  string
+	Role   Role
+}
+
+type TokenService interface {
+	Issue(claims TokenClaims) (token string, err error)
+	Parse(token string) (TokenClaims, error)
 }

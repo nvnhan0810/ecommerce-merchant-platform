@@ -14,6 +14,7 @@ import (
 	cataloginfra "github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/infrastructure"
 	catalogpres "github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/presentation"
 	healthpres "github.com/nvnhan0810/ecomerce-api/internal/modules/health/presentation"
+	identitycommands "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/commands"
 	identityqueries "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/queries"
 	identityinfra "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/infrastructure"
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
@@ -36,19 +37,24 @@ func main() {
 	defer pool.Close()
 
 	if cfg.AutoMigrate {
-		if err := postgres.Migrate(ctx, pool); err != nil {
+		if err := postgres.Migrate(ctx, cfg.DatabaseURL); err != nil {
 			log.Fatalf("migrate: %v", err)
 		}
 	}
 
 	productRepo := cataloginfra.NewPostgresProductRepository(pool)
 	userRepo := identityinfra.NewPostgresUserRepository(pool)
+	hasher := identityinfra.NewBcryptPasswordHasher()
+	tokens, err := identityinfra.NewJWTTokenService(cfg.JWTSecret, cfg.JWTTTL)
+	if err != nil {
+		log.Fatalf("jwt: %v", err)
+	}
 
 	if cfg.Seed {
 		if err := cataloginfra.SeedDemoProducts(productRepo); err != nil {
 			log.Fatalf("seed products: %v", err)
 		}
-		if err := identityinfra.SeedDemoUsers(userRepo); err != nil {
+		if err := identityinfra.SeedDemoUsers(userRepo, hasher, cfg.AdminBootstrapPassword); err != nil {
 			log.Fatalf("seed users: %v", err)
 		}
 	}
@@ -56,12 +62,15 @@ func main() {
 	listProducts := queries.NewListProductsHandler(productRepo)
 	createProduct := commands.NewCreateProductHandler(productRepo)
 	listUsers := identityqueries.NewListUsersByRoleHandler(userRepo)
+	login := identitycommands.NewLoginHandler(userRepo, hasher, tokens)
+	me := identityqueries.NewGetCurrentUserHandler(userRepo)
 
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Config:   cfg,
 		Health:   healthpres.NewHealthHandler(cfg.Env),
 		Catalog:  catalogpres.NewCatalogHandler(listProducts, createProduct),
-		Identity: identitypres.NewIdentityHandler(listUsers),
+		Identity: identitypres.NewIdentityHandler(listUsers, login, me),
+		Tokens:   tokens,
 	})
 
 	server := &http.Server{
