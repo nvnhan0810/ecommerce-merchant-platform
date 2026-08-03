@@ -23,6 +23,7 @@ import (
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/httpapi"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/postgres"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/seed"
+	"github.com/nvnhan0810/ecomerce-api/internal/platform/storage"
 )
 
 func main() {
@@ -59,17 +60,30 @@ func main() {
 		}
 	}
 
-	listProducts := queries.NewListProductsHandler(productRepo)
+	listProducts := queries.NewListProductsHandler(productRepo, cfg.PublicAPIBase)
 	merchantChecker := cataloginfra.NewAccountMerchantChecker(merchantRepo)
-	getProduct := queries.NewGetProductHandler(productRepo)
-	createProduct := commands.NewCreateProductHandler(productRepo, merchantChecker)
-	updateProduct := commands.NewUpdateProductHandler(productRepo, merchantChecker)
-	deleteProduct := commands.NewDeleteProductHandler(productRepo)
+	getProduct := queries.NewGetProductHandler(productRepo, cfg.PublicAPIBase)
+	createProduct := commands.NewCreateProductHandler(productRepo, merchantChecker, cfg.PublicAPIBase)
+	updateProduct := commands.NewUpdateProductHandler(productRepo, merchantChecker, cfg.PublicAPIBase)
+
+	var objectStore storage.ObjectStore = storage.NopStore{}
+	if s3, err := storage.NewS3Store(cfg.S3); err != nil {
+		log.Printf("object storage disabled: %v", err)
+	} else {
+		objectStore = s3
+		log.Printf("object storage ready bucket=%s endpoint=%s", cfg.S3.Bucket, cfg.S3.Endpoint)
+	}
+	deleteProduct := commands.NewDeleteProductHandler(productRepo, objectStore)
+	uploadImage := commands.NewUploadProductImageHandler(productRepo, objectStore, cfg.PublicAPIBase)
+	deleteImage := commands.NewDeleteProductImageHandler(productRepo, objectStore, cfg.PublicAPIBase)
 
 	router := httpapi.NewRouter(httpapi.Dependencies{
-		Config:  cfg,
-		Health:  healthpres.NewHealthHandler(cfg.Env),
-		Catalog: catalogpres.NewCatalogHandler(listProducts, getProduct, createProduct, updateProduct, deleteProduct),
+		Config: cfg,
+		Health: healthpres.NewHealthHandler(cfg.Env),
+		Catalog: catalogpres.NewCatalogHandler(
+			listProducts, getProduct, createProduct, updateProduct, deleteProduct,
+			uploadImage, deleteImage, objectStore,
+		),
 		Identity: identitypres.NewIdentityHandler(
 			identityqueries.NewListUsersHandler(userRepo),
 			identityqueries.NewListMerchantsHandler(merchantRepo),

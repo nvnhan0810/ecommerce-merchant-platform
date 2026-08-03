@@ -11,8 +11,9 @@ go run ./cmd/server
 ```
 
 Health: `GET /api/health`  
-Products (public): `GET /api/v1/products`  
-Products (admin JWT): `POST/PUT/DELETE /api/v1/products`, `GET /api/v1/products/{id}`  
+Products (public): `GET /api/v1/products`, `GET /api/v1/media/*`  
+Products (admin JWT): `POST/PUT/DELETE /api/v1/products`, `GET /api/v1/products/{id}`, `POST/DELETE /api/v1/products/{id}/image`  
+Image object key: `shops/{merchant_id}/products/{product_id}/{uuid}{ext}`  
 Merchants: `GET /api/v1/merchants` (admin JWT)
 
 ## Test

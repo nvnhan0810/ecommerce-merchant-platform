@@ -11,11 +11,12 @@ type GetProductQuery struct {
 }
 
 type GetProductHandler struct {
-	repo domain.ProductRepository
+	repo       domain.ProductRepository
+	publicBase string
 }
 
-func NewGetProductHandler(repo domain.ProductRepository) *GetProductHandler {
-	return &GetProductHandler{repo: repo}
+func NewGetProductHandler(repo domain.ProductRepository, publicBase string) *GetProductHandler {
+	return &GetProductHandler{repo: repo, publicBase: publicBase}
 }
 
 func (h *GetProductHandler) Handle(_ context.Context, q GetProductQuery) (ProductDTO, error) {
@@ -23,13 +24,5 @@ func (h *GetProductHandler) Handle(_ context.Context, q GetProductQuery) (Produc
 	if err != nil {
 		return ProductDTO{}, err
 	}
-	return ProductDTO{
-		ID:          string(p.ID),
-		MerchantID:  p.MerchantID,
-		Name:        p.Name,
-		Description: p.Description,
-		PriceCents:  p.Price.AmountCents,
-		Currency:    p.Price.Currency,
-		Stock:       p.Stock,
-	}, nil
+	return toDTO(p, h.publicBase), nil
 }

@@ -23,17 +23,18 @@ func (r *PostgresProductRepository) Save(product domain.Product) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO products (id, merchant_id, name, description, price_cents, currency, stock, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO products (id, merchant_id, name, description, price_cents, currency, stock, image_key, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (id) DO UPDATE SET
 			merchant_id = EXCLUDED.merchant_id,
 			name = EXCLUDED.name,
 			description = EXCLUDED.description,
 			price_cents = EXCLUDED.price_cents,
 			currency = EXCLUDED.currency,
-			stock = EXCLUDED.stock
+			stock = EXCLUDED.stock,
+			image_key = EXCLUDED.image_key
 	`, product.ID, product.MerchantID, product.Name, product.Description,
-		product.Price.AmountCents, product.Price.Currency, product.Stock, product.CreatedAt)
+		product.Price.AmountCents, product.Price.Currency, product.Stock, product.ImageKey, product.CreatedAt)
 	return err
 }
 
@@ -41,7 +42,7 @@ func (r *PostgresProductRepository) FindByID(id domain.ProductID) (domain.Produc
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, merchant_id, name, description, price_cents, currency, stock, created_at
+		SELECT id, merchant_id, name, description, price_cents, currency, stock, image_key, created_at
 		FROM products WHERE id = $1
 	`, id)
 	return scanProduct(row)
@@ -51,7 +52,7 @@ func (r *PostgresProductRepository) List(limit, offset int) ([]domain.Product, e
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, merchant_id, name, description, price_cents, currency, stock, created_at
+		SELECT id, merchant_id, name, description, price_cents, currency, stock, image_key, created_at
 		FROM products
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -99,12 +100,12 @@ type scannable interface {
 
 func scanProduct(row scannable) (domain.Product, error) {
 	var (
-		id, merchantID, name, description, currency string
-		priceCents                                  int64
-		stock                                       int
-		createdAt                                   time.Time
+		id, merchantID, name, description, currency, imageKey string
+		priceCents                                            int64
+		stock                                                 int
+		createdAt                                             time.Time
 	)
-	if err := row.Scan(&id, &merchantID, &name, &description, &priceCents, &currency, &stock, &createdAt); err != nil {
+	if err := row.Scan(&id, &merchantID, &name, &description, &priceCents, &currency, &stock, &imageKey, &createdAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Product{}, domain.ErrProductNotFound
 		}
@@ -121,6 +122,7 @@ func scanProduct(row scannable) (domain.Product, error) {
 		Description: description,
 		Price:       price,
 		Stock:       stock,
+		ImageKey:    imageKey,
 		CreatedAt:   createdAt.UTC(),
 	}, nil
 }
