@@ -13,6 +13,14 @@ export class ListProductsUseCase {
   }
 }
 
+export class GetProductUseCase {
+  constructor(private readonly repo: ProductRepository) {}
+
+  execute(id: string): Promise<Product> {
+    return this.repo.getById(id)
+  }
+}
+
 export class CreateProductUseCase {
   constructor(private readonly repo: ProductRepository) {}
 
@@ -34,5 +42,21 @@ export class DeleteProductUseCase {
 
   execute(id: string): Promise<void> {
     return this.repo.remove(id)
+  }
+}
+
+export class UploadProductImageUseCase {
+  constructor(private readonly repo: ProductRepository) {}
+
+  execute(id: string, file: File): Promise<Product> {
+    return this.repo.uploadImage(id, file)
+  }
+}
+
+export class DeleteProductImageUseCase {
+  constructor(private readonly repo: ProductRepository) {}
+
+  execute(id: string): Promise<Product> {
+    return this.repo.removeImage(id)
   }
 }

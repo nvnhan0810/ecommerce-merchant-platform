@@ -7,6 +7,8 @@ export class Product {
     readonly priceCents: number,
     readonly currency: string,
     readonly stock: number,
+    readonly imageKey: string = '',
+    readonly imageUrl: string = '',
   ) {}
 }
 
@@ -25,7 +27,10 @@ export type UpdateProductInput = CreateProductInput & {
 
 export interface ProductRepository {
   list(): Promise<Product[]>
+  getById(id: string): Promise<Product>
   create(input: CreateProductInput): Promise<Product>
   update(input: UpdateProductInput): Promise<Product>
   remove(id: string): Promise<void>
+  uploadImage(id: string, file: File): Promise<Product>
+  removeImage(id: string): Promise<Product>
 }
