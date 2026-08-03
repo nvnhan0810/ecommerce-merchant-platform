@@ -50,8 +50,8 @@ func TestSeedDemo_should_be_idempotent_and_link_products_to_merchants(t *testing
 	if adminN != len(identityinfra.DemoAdmins("Admin@123456")) {
 		t.Fatalf("admins=%d want %d", adminN, len(identityinfra.DemoAdmins("x")))
 	}
-	if productN != 12 {
-		t.Fatalf("products=%d want 12", productN)
+	if productN != len(cataloginfra.DemoProducts()) {
+		t.Fatalf("products=%d want %d", productN, len(cataloginfra.DemoProducts()))
 	}
 
 	list, err := products.List(100, 0)

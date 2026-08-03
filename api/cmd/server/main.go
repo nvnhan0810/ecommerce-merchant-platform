@@ -60,12 +60,16 @@ func main() {
 	}
 
 	listProducts := queries.NewListProductsHandler(productRepo)
-	createProduct := commands.NewCreateProductHandler(productRepo)
+	merchantChecker := cataloginfra.NewAccountMerchantChecker(merchantRepo)
+	getProduct := queries.NewGetProductHandler(productRepo)
+	createProduct := commands.NewCreateProductHandler(productRepo, merchantChecker)
+	updateProduct := commands.NewUpdateProductHandler(productRepo, merchantChecker)
+	deleteProduct := commands.NewDeleteProductHandler(productRepo)
 
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Config:  cfg,
 		Health:  healthpres.NewHealthHandler(cfg.Env),
-		Catalog: catalogpres.NewCatalogHandler(listProducts, createProduct),
+		Catalog: catalogpres.NewCatalogHandler(listProducts, getProduct, createProduct, updateProduct, deleteProduct),
 		Identity: identitypres.NewIdentityHandler(
 			identityqueries.NewListUsersHandler(userRepo),
 			identityqueries.NewListMerchantsHandler(merchantRepo),

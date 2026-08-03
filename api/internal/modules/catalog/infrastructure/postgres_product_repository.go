@@ -80,6 +80,19 @@ func (r *PostgresProductRepository) Count() (int, error) {
 	return n, err
 }
 
+func (r *PostgresProductRepository) Delete(id domain.ProductID) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	tag, err := r.pool.Exec(ctx, `DELETE FROM products WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrProductNotFound
+	}
+	return nil
+}
+
 type scannable interface {
 	Scan(dest ...any) error
 }

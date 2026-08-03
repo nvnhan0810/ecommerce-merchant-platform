@@ -18,16 +18,21 @@ func main() {
 	_ = envfile.Load(".env", "/app/.env")
 	cfg := config.Load()
 
+	cmd := "all"
 	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "help", "-h", "--help":
-			printUsage()
-			return
-		default:
-			fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
-			printUsage()
-			os.Exit(2)
-		}
+		cmd = os.Args[1]
+	}
+
+	switch cmd {
+	case "help", "-h", "--help":
+		printUsage()
+		return
+	case "all", "products":
+		// handled below
+	default:
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", cmd)
+		printUsage()
+		os.Exit(2)
 	}
 
 	ctx := context.Background()
@@ -43,8 +48,15 @@ func main() {
 	products := cataloginfra.NewPostgresProductRepository(pool)
 	hasher := identityinfra.NewBcryptPasswordHasher()
 
-	if err := seed.RunDemo(users, merchants, admins, products, hasher, cfg.AdminBootstrapPassword); err != nil {
-		log.Fatalf("seed: %v", err)
+	switch cmd {
+	case "products":
+		if err := seed.RunProducts(products, merchants); err != nil {
+			log.Fatalf("seed: %v", err)
+		}
+	default:
+		if err := seed.RunDemo(users, merchants, admins, products, hasher, cfg.AdminBootstrapPassword); err != nil {
+			log.Fatalf("seed: %v", err)
+		}
 	}
 
 	userN, _ := users.Count()
@@ -56,13 +68,16 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `Usage: seed
+	fmt.Fprintf(os.Stderr, `Usage: seed [command]
 
-Inserts / ensures demo accounts and products (idempotent).
+Commands:
+  all        Seed demo accounts + products (default)
+  products   Seed demo products only (merchants must already exist)
 
 Env: same as API (.env / DB_* / ADMIN_BOOTSTRAP_PASSWORD)
 
-Host example:
+Host examples:
   DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed
+  DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed products
 `)
 }

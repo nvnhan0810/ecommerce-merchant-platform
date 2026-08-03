@@ -36,6 +36,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err := seed.RunDemo(users, merchants, admins, productRepo, hasher, "Admin@123456"); err != nil {
 		t.Fatal(err)
 	}
+	checker := cataloginfra.NewAccountMerchantChecker(merchants)
 	return httpapi.NewRouter(httpapi.Dependencies{
 		Config: config.Config{
 			HTTPAddr:    ":0",
@@ -45,7 +46,10 @@ func newTestServer(t *testing.T) http.Handler {
 		Health: healthpres.NewHealthHandler("test"),
 		Catalog: catalogpres.NewCatalogHandler(
 			queries.NewListProductsHandler(productRepo),
-			commands.NewCreateProductHandler(productRepo),
+			queries.NewGetProductHandler(productRepo),
+			commands.NewCreateProductHandler(productRepo, checker),
+			commands.NewUpdateProductHandler(productRepo, checker),
+			commands.NewDeleteProductHandler(productRepo),
 		),
 		Identity: identitypres.NewIdentityHandler(
 			identityqueries.NewListUsersHandler(users),
@@ -221,6 +225,81 @@ func TestUserCRUD_should_create_update_delete(t *testing.T) {
 	}
 
 	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/users/"+created.Data.ID, nil)
+	delReq.Header.Set("Authorization", "Bearer "+token)
+	delRec := httptest.NewRecorder()
+	srv.ServeHTTP(delRec, delReq)
+	if delRec.Code != http.StatusNoContent {
+		t.Fatalf("delete status=%d body=%s", delRec.Code, delRec.Body.String())
+	}
+}
+
+func TestProductCRUD_should_require_merchant_and_admin(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+
+	unauth := httptest.NewRequest(http.MethodPost, "/api/v1/products", bytes.NewBufferString(`{}`))
+	unauth.Header.Set("Content-Type", "application/json")
+	unauthRec := httptest.NewRecorder()
+	srv.ServeHTTP(unauthRec, unauth)
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for create, got %d", unauthRec.Code)
+	}
+
+	token := adminToken(t, srv)
+	merchantsReq := httptest.NewRequest(http.MethodGet, "/api/v1/merchants", nil)
+	merchantsReq.Header.Set("Authorization", "Bearer "+token)
+	merchantsRec := httptest.NewRecorder()
+	srv.ServeHTTP(merchantsRec, merchantsReq)
+	if merchantsRec.Code != http.StatusOK {
+		t.Fatalf("merchants status=%d", merchantsRec.Code)
+	}
+	var merchantsPayload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(merchantsRec.Body.Bytes(), &merchantsPayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(merchantsPayload.Data) == 0 {
+		t.Fatal("expected seeded merchants")
+	}
+	merchantID := merchantsPayload.Data[0].ID
+
+	createBody := bytes.NewBufferString(`{"merchant_id":"` + merchantID + `","name":"CRUD Product","description":"demo","price_cents":120000,"currency":"VND","stock":7}`)
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/products", createBody)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createRec := httptest.NewRecorder()
+	srv.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created struct {
+		Data struct {
+			ID         string `json:"id"`
+			MerchantID string `json:"merchant_id"`
+			Name       string `json:"name"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Data.MerchantID != merchantID || created.Data.Name != "CRUD Product" {
+		t.Fatalf("unexpected create: %+v", created.Data)
+	}
+
+	updateBody := bytes.NewBufferString(`{"merchant_id":"` + merchantID + `","name":"CRUD Product 2","description":"upd","price_cents":150000,"currency":"VND","stock":3}`)
+	updateReq := httptest.NewRequest(http.MethodPut, "/api/v1/products/"+created.Data.ID, updateBody)
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.Header.Set("Authorization", "Bearer "+token)
+	updateRec := httptest.NewRecorder()
+	srv.ServeHTTP(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update status=%d body=%s", updateRec.Code, updateRec.Body.String())
+	}
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/products/"+created.Data.ID, nil)
 	delReq.Header.Set("Authorization", "Bearer "+token)
 	delRec := httptest.NewRecorder()
 	srv.ServeHTTP(delRec, delReq)

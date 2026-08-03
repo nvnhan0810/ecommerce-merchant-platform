@@ -22,6 +22,18 @@ func TestNewProduct_requiresName(t *testing.T) {
 	}
 }
 
+func TestNewProduct_requiresMerchant(t *testing.T) {
+	t.Parallel()
+	price, err := NewMoney(10000, "VND")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = NewProduct("  ", "Name", "desc", price, 1)
+	if err != ErrMerchantRequired {
+		t.Fatalf("expected ErrMerchantRequired, got %v", err)
+	}
+}
+
 func TestNewProduct_ok(t *testing.T) {
 	t.Parallel()
 	price, err := NewMoney(99000, "vnd")

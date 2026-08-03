@@ -31,7 +31,7 @@ func NewListProductsHandler(repo domain.ProductRepository) *ListProductsHandler 
 
 func (h *ListProductsHandler) Handle(_ context.Context, q ListProductsQuery) ([]ProductDTO, error) {
 	limit := q.Limit
-	if limit <= 0 || limit > 100 {
+	if limit <= 0 || limit > 500 {
 		limit = 20
 	}
 	offset := q.Offset

@@ -11,7 +11,8 @@ go run ./cmd/server
 ```
 
 Health: `GET /api/health`  
-Products: `GET /api/v1/products`  
+Products (public): `GET /api/v1/products`  
+Products (admin JWT): `POST/PUT/DELETE /api/v1/products`, `GET /api/v1/products/{id}`  
 Merchants: `GET /api/v1/merchants` (admin JWT)
 
 ## Test
@@ -64,6 +65,8 @@ Sau `refresh`, chạy seeder (hoặc restart API với `DB_SEED=true`):
 ```bash
 make migrate-refresh
 make seed
+# hoặc chỉ products (sau khi đã có merchants):
+make seed-products
 ```
 
 Tương đương:
@@ -72,6 +75,7 @@ Tương đương:
 cd api
 DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/migrate refresh
 DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed
+DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed products
 ```
 
 ### Demo seeder
@@ -84,6 +88,7 @@ DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed
 | merchant | `shop@`, `fashion@`, `tech@`, `home@ecomerce.local` | `Shop@123456` |
 | user | `buyer@`, `an@`, `binh@`, `chi@ecomerce.local` | `Buyer@123456` |
 
-Plus ~12 products gắn `merchant_id` thật. API boot với `DB_SEED=true` cũng gọi cùng seeder.
+Plus **20** demo products (5 / merchant) gắn `merchant_id` thật.  
+`make seed-products` chỉ seed catalog. API boot với `DB_SEED=true` cũng gọi cùng seeder.
 
 > GIN là HTTP framework, không dùng để migrate. Stack hiện tại giữ Chi + Goose.
