@@ -69,9 +69,13 @@ func main() {
 		Identity: identitypres.NewIdentityHandler(
 			identityqueries.NewListUsersHandler(userRepo),
 			identityqueries.NewListMerchantsHandler(merchantRepo),
+			identityqueries.NewGetUserHandler(userRepo),
 			identityqueries.NewGetMerchantHandler(merchantRepo),
 			identitycommands.NewLoginHandler(adminRepo, hasher, tokens),
 			identityqueries.NewGetCurrentUserHandler(adminRepo),
+			identitycommands.NewCreateUserHandler(userRepo, hasher),
+			identitycommands.NewUpdateUserHandler(userRepo, hasher),
+			identitycommands.NewDeleteUserHandler(userRepo),
 			identitycommands.NewCreateMerchantHandler(merchantRepo, hasher),
 			identitycommands.NewUpdateMerchantHandler(merchantRepo, hasher),
 			identitycommands.NewDeleteMerchantHandler(merchantRepo),

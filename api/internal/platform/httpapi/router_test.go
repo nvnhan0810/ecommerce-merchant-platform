@@ -50,9 +50,13 @@ func newTestServer(t *testing.T) http.Handler {
 		Identity: identitypres.NewIdentityHandler(
 			identityqueries.NewListUsersHandler(users),
 			identityqueries.NewListMerchantsHandler(merchants),
+			identityqueries.NewGetUserHandler(users),
 			identityqueries.NewGetMerchantHandler(merchants),
 			identitycommands.NewLoginHandler(admins, hasher, tokens),
 			identityqueries.NewGetCurrentUserHandler(admins),
+			identitycommands.NewCreateUserHandler(users, hasher),
+			identitycommands.NewUpdateUserHandler(users, hasher),
+			identitycommands.NewDeleteUserHandler(users),
 			identitycommands.NewCreateMerchantHandler(merchants, hasher),
 			identitycommands.NewUpdateMerchantHandler(merchants, hasher),
 			identitycommands.NewDeleteMerchantHandler(merchants),
@@ -126,6 +130,17 @@ func TestMerchants_should_require_admin_token(t *testing.T) {
 	}
 }
 
+func TestUsers_should_require_admin_token(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rec.Code)
+	}
+}
+
 func TestMerchantCRUD_should_create_update_delete(t *testing.T) {
 	t.Parallel()
 	srv := newTestServer(t)
@@ -160,6 +175,52 @@ func TestMerchantCRUD_should_create_update_delete(t *testing.T) {
 	}
 
 	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/merchants/"+created.Data.ID, nil)
+	delReq.Header.Set("Authorization", "Bearer "+token)
+	delRec := httptest.NewRecorder()
+	srv.ServeHTTP(delRec, delReq)
+	if delRec.Code != http.StatusNoContent {
+		t.Fatalf("delete status=%d body=%s", delRec.Code, delRec.Body.String())
+	}
+}
+
+func TestUserCRUD_should_create_update_delete(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+	token := adminToken(t, srv)
+
+	createBody := bytes.NewBufferString(`{"email":"cruduser@ecomerce.local","display_name":"CRUD User","password":"Buyer@123456"}`)
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/users", createBody)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createRec := httptest.NewRecorder()
+	srv.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created struct {
+		Data struct {
+			ID   string `json:"id"`
+			Role string `json:"role"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Data.Role != "user" {
+		t.Fatalf("expected role user, got %q", created.Data.Role)
+	}
+
+	updateBody := bytes.NewBufferString(`{"email":"cruduser2@ecomerce.local","display_name":"CRUD User 2","password":""}`)
+	updateReq := httptest.NewRequest(http.MethodPut, "/api/v1/users/"+created.Data.ID, updateBody)
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.Header.Set("Authorization", "Bearer "+token)
+	updateRec := httptest.NewRecorder()
+	srv.ServeHTTP(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update status=%d body=%s", updateRec.Code, updateRec.Body.String())
+	}
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/users/"+created.Data.ID, nil)
 	delReq.Header.Set("Authorization", "Bearer "+token)
 	delRec := httptest.NewRecorder()
 	srv.ServeHTTP(delRec, delReq)

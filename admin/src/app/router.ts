@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AppShell from '@/app/AppShell.vue'
 import OverviewPanel from '@/modules/dashboard/presentation/OverviewPanel.vue'
 import MerchantList from '@/modules/merchants/presentation/MerchantList.vue'
+import UserList from '@/modules/users/presentation/UserList.vue'
 import LoginPage from '@/modules/auth/presentation/LoginPage.vue'
 import { GetStoredSessionUseCase } from '@/modules/auth/application/auth-use-cases'
 import { LocalStorageSessionStore } from '@/modules/auth/infrastructure/local-storage-session-store'
@@ -22,6 +23,7 @@ export const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: '', component: OverviewPanel },
+        { path: 'users', component: UserList },
         { path: 'merchants', component: MerchantList },
       ],
     },

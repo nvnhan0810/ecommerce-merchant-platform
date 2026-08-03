@@ -15,9 +15,13 @@ import (
 type IdentityHandler struct {
 	listUsers      *queries.ListAccountsHandler
 	listMerchants  *queries.ListAccountsHandler
+	getUser        *queries.GetUserHandler
 	getMerchant    *queries.GetMerchantHandler
 	login          *commands.LoginHandler
 	me             *queries.GetCurrentUserHandler
+	createUser     *commands.CreateUserHandler
+	updateUser     *commands.UpdateUserHandler
+	deleteUser     *commands.DeleteUserHandler
 	createMerchant *commands.CreateMerchantHandler
 	updateMerchant *commands.UpdateMerchantHandler
 	deleteMerchant *commands.DeleteMerchantHandler
@@ -26,9 +30,13 @@ type IdentityHandler struct {
 func NewIdentityHandler(
 	listUsers *queries.ListAccountsHandler,
 	listMerchants *queries.ListAccountsHandler,
+	getUser *queries.GetUserHandler,
 	getMerchant *queries.GetMerchantHandler,
 	login *commands.LoginHandler,
 	me *queries.GetCurrentUserHandler,
+	createUser *commands.CreateUserHandler,
+	updateUser *commands.UpdateUserHandler,
+	deleteUser *commands.DeleteUserHandler,
 	createMerchant *commands.CreateMerchantHandler,
 	updateMerchant *commands.UpdateMerchantHandler,
 	deleteMerchant *commands.DeleteMerchantHandler,
@@ -36,9 +44,13 @@ func NewIdentityHandler(
 	return &IdentityHandler{
 		listUsers:      listUsers,
 		listMerchants:  listMerchants,
+		getUser:        getUser,
 		getMerchant:    getMerchant,
 		login:          login,
 		me:             me,
+		createUser:     createUser,
+		updateUser:     updateUser,
+		deleteUser:     deleteUser,
 		createMerchant: createMerchant,
 		updateMerchant: updateMerchant,
 		deleteMerchant: deleteMerchant,
@@ -90,14 +102,14 @@ func (h *IdentityHandler) ListMerchants(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"data": items})
 }
 
-type merchantBody struct {
+type accountBody struct {
 	Email       string `json:"email"`
 	DisplayName string `json:"display_name"`
 	Password    string `json:"password"`
 }
 
 func (h *IdentityHandler) CreateMerchant(w http.ResponseWriter, r *http.Request) {
-	var body merchantBody
+	var body accountBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
@@ -134,7 +146,7 @@ func (h *IdentityHandler) UpdateMerchant(w http.ResponseWriter, r *http.Request)
 		writeIdentityError(w, err)
 		return
 	}
-	var body merchantBody
+	var body accountBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
@@ -172,6 +184,75 @@ func (h *IdentityHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func (h *IdentityHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var body accountBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.createUser.Handle(r.Context(), commands.CreateUserCommand{
+		Email:       body.Email,
+		DisplayName: body.DisplayName,
+		Password:    body.Password,
+	})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"data": res})
+}
+
+func (h *IdentityHandler) GetUser(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseAccountID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	item, err := h.getUser.Handle(r.Context(), queries.GetUserQuery{ID: id})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+func (h *IdentityHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseAccountID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	var body accountBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.updateUser.Handle(r.Context(), commands.UpdateUserCommand{
+		ID:          id,
+		Email:       body.Email,
+		DisplayName: body.DisplayName,
+		Password:    body.Password,
+	})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
+func (h *IdentityHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseAccountID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	if err := h.deleteUser.Handle(r.Context(), commands.DeleteUserCommand{ID: id}); err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeIdentityError(w http.ResponseWriter, err error) {
