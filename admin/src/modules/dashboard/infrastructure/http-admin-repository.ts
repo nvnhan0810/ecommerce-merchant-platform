@@ -1,8 +1,5 @@
-import {
-  AdminOverview,
-  MerchantAccount,
-  type AdminRepository,
-} from '../../dashboard/domain/overview'
+import { AdminOverview, type AdminRepository } from '../../dashboard/domain/overview'
+import { MerchantAccount } from '../../merchants/domain/merchant'
 import { apiFetch } from '@/shared/http'
 
 type UserApiItem = {
@@ -33,7 +30,7 @@ export class HttpAdminRepository implements AdminRepository {
     }
     const body = (await res.json()) as { data: UserApiItem[] }
     return body.data.map(
-      (item) => new MerchantAccount(item.id, item.email, item.display_name),
+      (item) => new MerchantAccount(item.id, item.email, item.display_name, item.role),
     )
   }
 }

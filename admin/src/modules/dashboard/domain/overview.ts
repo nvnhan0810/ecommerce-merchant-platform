@@ -1,3 +1,5 @@
+import { MerchantAccount } from '../../merchants/domain/merchant'
+
 export class AdminOverview {
   constructor(
     readonly userCount: number,
@@ -9,13 +11,7 @@ export class AdminOverview {
   }
 }
 
-export class MerchantAccount {
-  constructor(
-    readonly id: string,
-    readonly email: string,
-    readonly displayName: string,
-  ) {}
-}
+export { MerchantAccount }
 
 export interface AdminRepository {
   loadOverview(): Promise<AdminOverview>

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/commands"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/queries"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
@@ -12,17 +13,36 @@ import (
 )
 
 type IdentityHandler struct {
-	listByRole *queries.ListUsersByRoleHandler
-	login      *commands.LoginHandler
-	me         *queries.GetCurrentUserHandler
+	listUsers      *queries.ListAccountsHandler
+	listMerchants  *queries.ListAccountsHandler
+	getMerchant    *queries.GetMerchantHandler
+	login          *commands.LoginHandler
+	me             *queries.GetCurrentUserHandler
+	createMerchant *commands.CreateMerchantHandler
+	updateMerchant *commands.UpdateMerchantHandler
+	deleteMerchant *commands.DeleteMerchantHandler
 }
 
 func NewIdentityHandler(
-	listByRole *queries.ListUsersByRoleHandler,
+	listUsers *queries.ListAccountsHandler,
+	listMerchants *queries.ListAccountsHandler,
+	getMerchant *queries.GetMerchantHandler,
 	login *commands.LoginHandler,
 	me *queries.GetCurrentUserHandler,
+	createMerchant *commands.CreateMerchantHandler,
+	updateMerchant *commands.UpdateMerchantHandler,
+	deleteMerchant *commands.DeleteMerchantHandler,
 ) *IdentityHandler {
-	return &IdentityHandler{listByRole: listByRole, login: login, me: me}
+	return &IdentityHandler{
+		listUsers:      listUsers,
+		listMerchants:  listMerchants,
+		getMerchant:    getMerchant,
+		login:          login,
+		me:             me,
+		createMerchant: createMerchant,
+		updateMerchant: updateMerchant,
+		deleteMerchant: deleteMerchant,
+	}
 }
 
 type loginRequest struct {
@@ -41,18 +61,7 @@ func (h *IdentityHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Password: body.Password,
 	})
 	if err != nil {
-		status := http.StatusUnauthorized
-		switch {
-		case errors.Is(err, domain.ErrForbiddenRole):
-			status = http.StatusForbidden
-		case errors.Is(err, domain.ErrPasswordNotSet), errors.Is(err, domain.ErrInvalidCredentials):
-			status = http.StatusUnauthorized
-		case errors.Is(err, domain.ErrWeakPassword):
-			status = http.StatusBadRequest
-		default:
-			status = http.StatusInternalServerError
-		}
-		writeError(w, status, err.Error())
+		writeIdentityError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -66,32 +75,120 @@ func (h *IdentityHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.me.Handle(r.Context(), queries.GetCurrentUserQuery{UserID: claims.UserID})
 	if err != nil {
-		if errors.Is(err, domain.ErrUserNotFound) {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeIdentityError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": user})
 }
 
 func (h *IdentityHandler) ListMerchants(w http.ResponseWriter, r *http.Request) {
-	items, err := h.listByRole.Handle(r.Context(), queries.ListUsersByRoleQuery{Role: domain.RoleMerchant})
+	items, err := h.listMerchants.Handle(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeIdentityError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": items})
 }
 
-func (h *IdentityHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	items, err := h.listByRole.Handle(r.Context(), queries.ListUsersByRoleQuery{Role: domain.RoleUser})
+type merchantBody struct {
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	Password    string `json:"password"`
+}
+
+func (h *IdentityHandler) CreateMerchant(w http.ResponseWriter, r *http.Request) {
+	var body merchantBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.createMerchant.Handle(r.Context(), commands.CreateMerchantCommand{
+		Email:       body.Email,
+		DisplayName: body.DisplayName,
+		Password:    body.Password,
+	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"data": res})
+}
+
+func (h *IdentityHandler) GetMerchant(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseAccountID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	item, err := h.getMerchant.Handle(r.Context(), queries.GetMerchantQuery{ID: id})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+func (h *IdentityHandler) UpdateMerchant(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseAccountID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	var body merchantBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.updateMerchant.Handle(r.Context(), commands.UpdateMerchantCommand{
+		ID:          id,
+		Email:       body.Email,
+		DisplayName: body.DisplayName,
+		Password:    body.Password,
+	})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
+func (h *IdentityHandler) DeleteMerchant(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseAccountID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	if err := h.deleteMerchant.Handle(r.Context(), commands.DeleteMerchantCommand{ID: id}); err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *IdentityHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	items, err := h.listUsers.Handle(r.Context())
+	if err != nil {
+		writeIdentityError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func writeIdentityError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	switch {
+	case errors.Is(err, domain.ErrAccountNotFound):
+		status = http.StatusNotFound
+	case errors.Is(err, domain.ErrEmailTaken):
+		status = http.StatusConflict
+	case errors.Is(err, domain.ErrInvalidEmail),
+		errors.Is(err, domain.ErrWeakPassword),
+		errors.Is(err, domain.ErrInvalidAccountID):
+		status = http.StatusBadRequest
+	case errors.Is(err, domain.ErrInvalidCredentials), errors.Is(err, domain.ErrPasswordNotSet):
+		status = http.StatusUnauthorized
+	}
+	writeError(w, status, err.Error())
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

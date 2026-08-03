@@ -25,8 +25,9 @@ go test ./...
 ```
 cmd/server/
 cmd/migrate/
+cmd/seed/
 internal/modules/<feature>/{domain,application,infrastructure,presentation}
-internal/platform/{config,httpapi,postgres}
+internal/platform/{config,httpapi,postgres,seed}
 ```
 
 ## Postgres + Goose migrations (Up / Down)
@@ -58,11 +59,11 @@ make migrate-down          # rollback 1 bước
 make migrate-refresh       # down all + up all — mất data
 ```
 
-Sau `refresh`, restart API để seed lại:
+Sau `refresh`, chạy seeder (hoặc restart API với `DB_SEED=true`):
 
 ```bash
 make migrate-refresh
-kubectl -n ecomerce-nvnhan0810-com rollout restart deployment/ecomerce-api
+make seed
 ```
 
 Tương đương:
@@ -70,6 +71,19 @@ Tương đương:
 ```bash
 cd api
 DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/migrate refresh
+DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed
 ```
+
+### Demo seeder
+
+`make seed` / `go run ./cmd/seed` đảm bảo (idempotent):
+
+| Role | Email | Password |
+|------|-------|----------|
+| admin | `admin@ecomerce.local`, `ops@ecomerce.local` | `ADMIN_BOOTSTRAP_PASSWORD` (default `Admin@123456`) |
+| merchant | `shop@`, `fashion@`, `tech@`, `home@ecomerce.local` | `Shop@123456` |
+| user | `buyer@`, `an@`, `binh@`, `chi@ecomerce.local` | `Buyer@123456` |
+
+Plus ~12 products gắn `merchant_id` thật. API boot với `DB_SEED=true` cũng gọi cùng seeder.
 
 > GIN là HTTP framework, không dùng để migrate. Stack hiện tại giữ Chi + Goose.

@@ -7,46 +7,92 @@ import (
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
 )
 
-type memRepo struct {
-	byEmail map[string]domain.User
-	byID    map[domain.UserID]domain.User
-}
+func TestLoginHandler_should_issue_token_for_admin(t *testing.T) {
+	t.Parallel()
+	admins := infrastructureMem()
+	h := stubHasher{}
+	a, err := domain.NewAccount("admin@ecomerce.local", "Admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetPassword(h, "Admin@123456"); err != nil {
+		t.Fatal(err)
+	}
+	_ = admins.Save(a)
 
-func newMemRepo() *memRepo {
-	return &memRepo{
-		byEmail: map[string]domain.User{},
-		byID:    map[domain.UserID]domain.User{},
+	handler := NewLoginHandler(admins, h, stubTokens{})
+	res, err := handler.Handle(context.Background(), LoginCommand{
+		Email:    "admin@ecomerce.local",
+		Password: "Admin@123456",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.AccessToken == "" || res.User.Role != "admin" {
+		t.Fatalf("unexpected result: %+v", res)
 	}
 }
 
-func (r *memRepo) Save(u domain.User) error {
-	r.byEmail[u.Email] = u
-	r.byID[u.ID] = u
+func TestLoginHandler_should_reject_unknown_admin(t *testing.T) {
+	t.Parallel()
+	handler := NewLoginHandler(infrastructureMem(), stubHasher{}, stubTokens{})
+	_, err := handler.Handle(context.Background(), LoginCommand{
+		Email:    "shop@ecomerce.local",
+		Password: "Shop@123456",
+	})
+	if err != domain.ErrInvalidCredentials {
+		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
+	}
+}
+
+func infrastructureMem() *memAccounts {
+	return &memAccounts{byID: map[domain.AccountID]domain.Account{}, byEmail: map[string]domain.Account{}}
+}
+
+type memAccounts struct {
+	byID    map[domain.AccountID]domain.Account
+	byEmail map[string]domain.Account
+}
+
+func (r *memAccounts) Save(a domain.Account) error {
+	if old, ok := r.byID[a.ID]; ok && old.Email != a.Email {
+		delete(r.byEmail, old.Email)
+	}
+	r.byID[a.ID] = a
+	r.byEmail[a.Email] = a
 	return nil
 }
-func (r *memRepo) FindByEmail(email string) (domain.User, error) {
-	u, ok := r.byEmail[email]
+func (r *memAccounts) FindByEmail(email string) (domain.Account, error) {
+	a, ok := r.byEmail[email]
 	if !ok {
-		return domain.User{}, domain.ErrUserNotFound
+		return domain.Account{}, domain.ErrAccountNotFound
 	}
-	return u, nil
+	return a, nil
 }
-func (r *memRepo) FindByID(id domain.UserID) (domain.User, error) {
-	u, ok := r.byID[id]
+func (r *memAccounts) FindByID(id domain.AccountID) (domain.Account, error) {
+	a, ok := r.byID[id]
 	if !ok {
-		return domain.User{}, domain.ErrUserNotFound
+		return domain.Account{}, domain.ErrAccountNotFound
 	}
-	return u, nil
+	return a, nil
 }
-func (r *memRepo) ListByRole(role domain.Role) ([]domain.User, error) {
-	out := []domain.User{}
-	for _, u := range r.byEmail {
-		if u.Role == role {
-			out = append(out, u)
-		}
+func (r *memAccounts) List() ([]domain.Account, error) {
+	out := make([]domain.Account, 0, len(r.byID))
+	for _, a := range r.byID {
+		out = append(out, a)
 	}
 	return out, nil
 }
+func (r *memAccounts) Delete(id domain.AccountID) error {
+	a, ok := r.byID[id]
+	if !ok {
+		return domain.ErrAccountNotFound
+	}
+	delete(r.byID, id)
+	delete(r.byEmail, a.Email)
+	return nil
+}
+func (r *memAccounts) Count() (int, error) { return len(r.byID), nil }
 
 type stubHasher struct{}
 
@@ -65,48 +111,4 @@ func (stubTokens) Issue(c domain.TokenClaims) (string, error) {
 }
 func (stubTokens) Parse(token string) (domain.TokenClaims, error) {
 	return domain.TokenClaims{}, nil
-}
-
-func TestLoginHandler_should_issue_token_for_admin(t *testing.T) {
-	t.Parallel()
-	repo := newMemRepo()
-	h := stubHasher{}
-	u, err := domain.NewUser("admin@ecomerce.local", "Admin", domain.RoleAdmin)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := u.SetPassword(h, "Admin@123456"); err != nil {
-		t.Fatal(err)
-	}
-	_ = repo.Save(u)
-
-	handler := NewLoginHandler(repo, h, stubTokens{})
-	res, err := handler.Handle(context.Background(), LoginCommand{
-		Email:    "admin@ecomerce.local",
-		Password: "Admin@123456",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.AccessToken == "" || res.User.Role != "admin" {
-		t.Fatalf("unexpected result: %+v", res)
-	}
-}
-
-func TestLoginHandler_should_reject_merchant(t *testing.T) {
-	t.Parallel()
-	repo := newMemRepo()
-	h := stubHasher{}
-	u, _ := domain.NewUser("shop@ecomerce.local", "Shop", domain.RoleMerchant)
-	_ = u.SetPassword(h, "Shop@123456")
-	_ = repo.Save(u)
-
-	handler := NewLoginHandler(repo, h, stubTokens{})
-	_, err := handler.Handle(context.Background(), LoginCommand{
-		Email:    "shop@ecomerce.local",
-		Password: "Shop@123456",
-	})
-	if err != domain.ErrForbiddenRole {
-		t.Fatalf("expected ErrForbiddenRole, got %v", err)
-	}
 }

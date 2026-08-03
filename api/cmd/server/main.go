@@ -22,6 +22,7 @@ import (
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/envfile"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/httpapi"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/postgres"
+	"github.com/nvnhan0810/ecomerce-api/internal/platform/seed"
 )
 
 func main() {
@@ -44,6 +45,8 @@ func main() {
 
 	productRepo := cataloginfra.NewPostgresProductRepository(pool)
 	userRepo := identityinfra.NewPostgresUserRepository(pool)
+	merchantRepo := identityinfra.NewPostgresMerchantRepository(pool)
+	adminRepo := identityinfra.NewPostgresAdminRepository(pool)
 	hasher := identityinfra.NewBcryptPasswordHasher()
 	tokens, err := identityinfra.NewJWTTokenService(cfg.JWTSecret, cfg.JWTTTL)
 	if err != nil {
@@ -51,26 +54,29 @@ func main() {
 	}
 
 	if cfg.Seed {
-		if err := cataloginfra.SeedDemoProducts(productRepo); err != nil {
-			log.Fatalf("seed products: %v", err)
-		}
-		if err := identityinfra.SeedDemoUsers(userRepo, hasher, cfg.AdminBootstrapPassword); err != nil {
-			log.Fatalf("seed users: %v", err)
+		if err := seed.RunDemo(userRepo, merchantRepo, adminRepo, productRepo, hasher, cfg.AdminBootstrapPassword); err != nil {
+			log.Fatalf("seed: %v", err)
 		}
 	}
 
 	listProducts := queries.NewListProductsHandler(productRepo)
 	createProduct := commands.NewCreateProductHandler(productRepo)
-	listUsers := identityqueries.NewListUsersByRoleHandler(userRepo)
-	login := identitycommands.NewLoginHandler(userRepo, hasher, tokens)
-	me := identityqueries.NewGetCurrentUserHandler(userRepo)
 
 	router := httpapi.NewRouter(httpapi.Dependencies{
-		Config:   cfg,
-		Health:   healthpres.NewHealthHandler(cfg.Env),
-		Catalog:  catalogpres.NewCatalogHandler(listProducts, createProduct),
-		Identity: identitypres.NewIdentityHandler(listUsers, login, me),
-		Tokens:   tokens,
+		Config:  cfg,
+		Health:  healthpres.NewHealthHandler(cfg.Env),
+		Catalog: catalogpres.NewCatalogHandler(listProducts, createProduct),
+		Identity: identitypres.NewIdentityHandler(
+			identityqueries.NewListUsersHandler(userRepo),
+			identityqueries.NewListMerchantsHandler(merchantRepo),
+			identityqueries.NewGetMerchantHandler(merchantRepo),
+			identitycommands.NewLoginHandler(adminRepo, hasher, tokens),
+			identityqueries.NewGetCurrentUserHandler(adminRepo),
+			identitycommands.NewCreateMerchantHandler(merchantRepo, hasher),
+			identitycommands.NewUpdateMerchantHandler(merchantRepo, hasher),
+			identitycommands.NewDeleteMerchantHandler(merchantRepo),
+		),
+		Tokens: tokens,
 	})
 
 	server := &http.Server{

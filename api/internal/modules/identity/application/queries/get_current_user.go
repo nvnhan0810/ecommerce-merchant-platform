@@ -7,33 +7,26 @@ import (
 )
 
 type GetCurrentUserQuery struct {
-	UserID domain.UserID
-}
-
-type CurrentUserDTO struct {
-	ID          string `json:"id"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	Role        string `json:"role"`
+	UserID domain.AccountID
 }
 
 type GetCurrentUserHandler struct {
-	repo domain.UserRepository
+	admins domain.AccountRepository
 }
 
-func NewGetCurrentUserHandler(repo domain.UserRepository) *GetCurrentUserHandler {
-	return &GetCurrentUserHandler{repo: repo}
+func NewGetCurrentUserHandler(admins domain.AccountRepository) *GetCurrentUserHandler {
+	return &GetCurrentUserHandler{admins: admins}
 }
 
-func (h *GetCurrentUserHandler) Handle(_ context.Context, q GetCurrentUserQuery) (CurrentUserDTO, error) {
-	user, err := h.repo.FindByID(q.UserID)
+func (h *GetCurrentUserHandler) Handle(_ context.Context, q GetCurrentUserQuery) (AccountDTO, error) {
+	account, err := h.admins.FindByID(q.UserID)
 	if err != nil {
-		return CurrentUserDTO{}, err
+		return AccountDTO{}, err
 	}
-	return CurrentUserDTO{
-		ID:          string(user.ID),
-		Email:       user.Email,
-		DisplayName: user.DisplayName,
-		Role:        string(user.Role),
+	return AccountDTO{
+		ID:          string(account.ID),
+		Email:       account.Email,
+		DisplayName: account.DisplayName,
+		Role:        string(domain.RoleAdmin),
 	}, nil
 }
