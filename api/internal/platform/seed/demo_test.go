@@ -5,6 +5,7 @@ import (
 
 	cataloginfra "github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/infrastructure"
 	identityinfra "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/infrastructure"
+	orderinginfra "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/infrastructure"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/seed"
 )
 
@@ -15,12 +16,13 @@ func TestSeedDemo_should_be_idempotent_and_link_products_to_merchants(t *testing
 	merchants := identityinfra.NewInMemoryAccountRepository()
 	admins := identityinfra.NewInMemoryAccountRepository()
 	products := cataloginfra.NewInMemoryProductRepository()
+	orders := orderinginfra.NewInMemoryOrderRepository()
 	hasher := identityinfra.NewBcryptPasswordHasher()
 
-	if err := seed.RunDemo(users, merchants, admins, products, hasher, "Admin@123456"); err != nil {
+	if err := seed.RunDemo(users, merchants, admins, products, orders, hasher, "Admin@123456"); err != nil {
 		t.Fatalf("first seed: %v", err)
 	}
-	if err := seed.RunDemo(users, merchants, admins, products, hasher, "Admin@123456"); err != nil {
+	if err := seed.RunDemo(users, merchants, admins, products, orders, hasher, "Admin@123456"); err != nil {
 		t.Fatalf("second seed: %v", err)
 	}
 
@@ -40,6 +42,10 @@ func TestSeedDemo_should_be_idempotent_and_link_products_to_merchants(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
+	orderN, err := orders.Count()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if userN != len(identityinfra.DemoUsers()) {
 		t.Fatalf("users=%d want %d", userN, len(identityinfra.DemoUsers()))
@@ -52,6 +58,9 @@ func TestSeedDemo_should_be_idempotent_and_link_products_to_merchants(t *testing
 	}
 	if productN != len(cataloginfra.DemoProducts()) {
 		t.Fatalf("products=%d want %d", productN, len(cataloginfra.DemoProducts()))
+	}
+	if orderN != 7 {
+		t.Fatalf("orders=%d want 7", orderN)
 	}
 
 	list, err := products.List(100, 0)
