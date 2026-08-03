@@ -11,6 +11,7 @@ import (
 	healthpres "github.com/nvnhan0810/ecomerce-api/internal/modules/health/presentation"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
+	orderingpres "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/presentation"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/config"
 )
 
@@ -19,6 +20,7 @@ type Dependencies struct {
 	Health   *healthpres.HealthHandler
 	Catalog  *catalogpres.CatalogHandler
 	Identity *identitypres.IdentityHandler
+	Ordering *orderingpres.OrderingHandler
 	Tokens   domain.TokenService
 }
 
@@ -65,6 +67,9 @@ func NewRouter(deps Dependencies) http.Handler {
 			admin.Delete("/products/{id}", deps.Catalog.DeleteProduct)
 			admin.Post("/products/{id}/image", deps.Catalog.UploadProductImage)
 			admin.Delete("/products/{id}/image", deps.Catalog.DeleteProductImage)
+			admin.Get("/orders", deps.Ordering.ListOrders)
+			admin.Get("/orders/{id}", deps.Ordering.GetOrder)
+			admin.Patch("/orders/{id}/status", deps.Ordering.UpdateOrderStatus)
 		})
 	})
 

@@ -17,7 +17,10 @@ import (
 	identityqueries "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/queries"
 	identityinfra "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/infrastructure"
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
+	orderingcommands "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/application/commands"
+	orderingqueries "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/application/queries"
 	orderinginfra "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/infrastructure"
+	orderingpres "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/presentation"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/config"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/httpapi"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/seed"
@@ -27,6 +30,7 @@ import (
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
 	productRepo := cataloginfra.NewInMemoryProductRepository()
+	orderRepo := orderinginfra.NewInMemoryOrderRepository()
 	users := identityinfra.NewInMemoryAccountRepository()
 	merchants := identityinfra.NewInMemoryAccountRepository()
 	admins := identityinfra.NewInMemoryAccountRepository()
@@ -35,7 +39,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := seed.RunDemo(users, merchants, admins, productRepo, orderinginfra.NewInMemoryOrderRepository(), hasher, "Admin@123456"); err != nil {
+	if err := seed.RunDemo(users, merchants, admins, productRepo, orderRepo, hasher, "Admin@123456"); err != nil {
 		t.Fatal(err)
 	}
 	checker := cataloginfra.NewAccountMerchantChecker(merchants)
@@ -71,6 +75,11 @@ func newTestServer(t *testing.T) http.Handler {
 			identitycommands.NewCreateMerchantHandler(merchants, hasher),
 			identitycommands.NewUpdateMerchantHandler(merchants, hasher),
 			identitycommands.NewDeleteMerchantHandler(merchants),
+		),
+		Ordering: orderingpres.NewOrderingHandler(
+			orderingqueries.NewListOrdersHandler(orderRepo),
+			orderingqueries.NewGetOrderHandler(orderRepo),
+			orderingcommands.NewUpdateOrderStatusHandler(orderRepo),
 		),
 		Tokens: tokens,
 	})
@@ -312,5 +321,95 @@ func TestProductCRUD_should_require_merchant_and_admin(t *testing.T) {
 	srv.ServeHTTP(delRec, delReq)
 	if delRec.Code != http.StatusNoContent {
 		t.Fatalf("delete status=%d body=%s", delRec.Code, delRec.Body.String())
+	}
+}
+
+func TestOrders_admin_list_get_update_status(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+
+	unauth := httptest.NewRequest(http.MethodGet, "/api/v1/orders", nil)
+	unauthRec := httptest.NewRecorder()
+	srv.ServeHTTP(unauthRec, unauth)
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", unauthRec.Code)
+	}
+
+	token := adminToken(t, srv)
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/orders?limit=50", nil)
+	listReq.Header.Set("Authorization", "Bearer "+token)
+	listRec := httptest.NewRecorder()
+	srv.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listRec.Code, listRec.Body.String())
+	}
+	var listPayload struct {
+		Data []struct {
+			ID     string `json:"id"`
+			Code   string `json:"code"`
+			Status string `json:"status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listPayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(listPayload.Data) != 7 {
+		t.Fatalf("orders=%d want 7", len(listPayload.Data))
+	}
+	first := listPayload.Data[0]
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+first.ID, nil)
+	getReq.Header.Set("Authorization", "Bearer "+token)
+	getRec := httptest.NewRecorder()
+	srv.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get status=%d body=%s", getRec.Code, getRec.Body.String())
+	}
+	var getPayload struct {
+		Data struct {
+			History []struct {
+				EventType  string `json:"event_type"`
+				ActorRole  string `json:"actor_role"`
+				ActorEmail string `json:"actor_email"`
+			} `json:"history"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(getRec.Body.Bytes(), &getPayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(getPayload.Data.History) == 0 {
+		t.Fatal("expected order history")
+	}
+	if getPayload.Data.History[0].EventType != "created" {
+		t.Fatalf("first event=%s", getPayload.Data.History[0].EventType)
+	}
+
+	codeReq := httptest.NewRequest(http.MethodGet, "/api/v1/orders?code="+first.Code, nil)
+	codeReq.Header.Set("Authorization", "Bearer "+token)
+	codeRec := httptest.NewRecorder()
+	srv.ServeHTTP(codeRec, codeReq)
+	if codeRec.Code != http.StatusOK {
+		t.Fatalf("code search status=%d body=%s", codeRec.Code, codeRec.Body.String())
+	}
+
+	patchBody := bytes.NewBufferString(`{"status":"confirmed"}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/orders/"+first.ID+"/status", patchBody)
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq.Header.Set("Authorization", "Bearer "+token)
+	patchRec := httptest.NewRecorder()
+	srv.ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusOK {
+		t.Fatalf("patch status=%d body=%s", patchRec.Code, patchRec.Body.String())
+	}
+	var patched struct {
+		Data struct {
+			Status string `json:"status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(patchRec.Body.Bytes(), &patched); err != nil {
+		t.Fatal(err)
+	}
+	if patched.Data.Status != "confirmed" {
+		t.Fatalf("status=%s want confirmed", patched.Data.Status)
 	}
 }

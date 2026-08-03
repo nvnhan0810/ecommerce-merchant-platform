@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"fmt"
+	"time"
 
 	catalogdomain "github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/domain"
 	identitydomain "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
@@ -61,7 +62,13 @@ func SeedDemoOrders(
 		productsByMerchant[p.MerchantID] = append(productsByMerchant[p.MerchantID], p)
 	}
 
-	for _, spec := range demoOrderSpecs() {
+	adminActor := domain.Actor{
+		Role:        "admin",
+		Email:       "admin@ecomerce.local",
+		DisplayName: "Admin Demo",
+	}
+
+	for i, spec := range demoOrderSpecs() {
 		user, ok := userByEmail[spec.userEmail]
 		if !ok {
 			return fmt.Errorf("seed order: user %q missing", spec.userEmail)
@@ -85,8 +92,20 @@ func SeedDemoOrders(
 		if err != nil {
 			return err
 		}
-		if err := order.ChangeStatus(spec.status); err != nil {
-			return err
+		// Stagger demo timestamps slightly for readable history.
+		createdAt := time.Now().UTC().Add(-time.Duration(len(demoOrderSpecs())-i) * time.Hour)
+		order.CreatedAt = createdAt
+		order.UpdatedAt = createdAt
+		order.RecordCreated(domain.Actor{
+			ID:          string(user.ID),
+			Email:       user.Email,
+			Role:        "user",
+			DisplayName: user.DisplayName,
+		})
+		if spec.status != domain.StatusNew {
+			if err := order.ChangeStatus(spec.status, adminActor); err != nil {
+				return err
+			}
 		}
 		if err := orders.Save(order); err != nil {
 			return err
