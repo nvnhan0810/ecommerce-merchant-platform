@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/domain"
+	"github.com/nvnhan0810/ecomerce-api/internal/platform/storage"
 )
 
 type DeleteProductCommand struct {
@@ -11,16 +12,24 @@ type DeleteProductCommand struct {
 }
 
 type DeleteProductHandler struct {
-	repo domain.ProductRepository
+	repo  domain.ProductRepository
+	store storage.ObjectStore
 }
 
-func NewDeleteProductHandler(repo domain.ProductRepository) *DeleteProductHandler {
-	return &DeleteProductHandler{repo: repo}
+func NewDeleteProductHandler(repo domain.ProductRepository, store storage.ObjectStore) *DeleteProductHandler {
+	return &DeleteProductHandler{repo: repo, store: store}
 }
 
-func (h *DeleteProductHandler) Handle(_ context.Context, cmd DeleteProductCommand) error {
-	if _, err := h.repo.FindByID(cmd.ID); err != nil {
+func (h *DeleteProductHandler) Handle(ctx context.Context, cmd DeleteProductCommand) error {
+	product, err := h.repo.FindByID(cmd.ID)
+	if err != nil {
 		return err
 	}
-	return h.repo.Delete(cmd.ID)
+	if err := h.repo.Delete(cmd.ID); err != nil {
+		return err
+	}
+	if product.ImageKey != "" && h.store != nil && h.store.Enabled() {
+		_ = h.store.Delete(ctx, product.ImageKey)
+	}
+	return nil
 }

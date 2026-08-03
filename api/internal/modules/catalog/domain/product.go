@@ -15,6 +15,7 @@ var (
 	ErrMerchantRequired    = errors.New("merchant is required")
 	ErrMerchantNotFound    = errors.New("merchant not found")
 	ErrInvalidProductID    = errors.New("product id is required")
+	ErrInvalidImage        = errors.New("invalid product image")
 )
 
 type Money struct {
@@ -54,6 +55,7 @@ type Product struct {
 	Description string
 	Price       Money
 	Stock       int
+	ImageKey    string
 	CreatedAt   time.Time
 }
 
@@ -98,6 +100,14 @@ func (p *Product) Update(merchantID, name, description string, price Money, stoc
 	p.Price = price
 	p.Stock = stock
 	return nil
+}
+
+func (p *Product) SetImageKey(key string) {
+	p.ImageKey = strings.TrimSpace(key)
+}
+
+func (p *Product) ClearImage() {
+	p.ImageKey = ""
 }
 
 // MerchantChecker verifies a merchant account exists for product ownership.

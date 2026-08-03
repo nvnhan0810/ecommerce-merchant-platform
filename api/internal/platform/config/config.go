@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nvnhan0810/ecomerce-api/internal/platform/storage"
 )
 
 type Config struct {
@@ -18,9 +20,12 @@ type Config struct {
 	AutoMigrate bool
 	Seed        bool
 
-	JWTSecret            string
-	JWTTTL               time.Duration
+	JWTSecret              string
+	JWTTTL                 time.Duration
 	AdminBootstrapPassword string
+
+	S3            storage.Config
+	PublicAPIBase string
 }
 
 func Load() Config {
@@ -47,6 +52,15 @@ func Load() Config {
 		JWTSecret:              getenv("JWT_SECRET", "ecomerce-dev-jwt-secret-change-me"),
 		JWTTTL:                 time.Duration(ttlHours) * time.Hour,
 		AdminBootstrapPassword: getenv("ADMIN_BOOTSTRAP_PASSWORD", "Admin@123456"),
+		S3: storage.Config{
+			Endpoint:     getenv("S3_ENDPOINT", "http://seaweedfs-s3.seaweedfs.svc.cluster.local:8333"),
+			Region:       getenv("S3_REGION", "us-east-1"),
+			AccessKey:    getenv("S3_ACCESS_KEY", ""),
+			SecretKey:    getenv("S3_SECRET_KEY", ""),
+			Bucket:       getenv("S3_BUCKET", ""),
+			UsePathStyle: getenvBool("S3_USE_PATH_STYLE", true),
+		},
+		PublicAPIBase: strings.TrimRight(getenv("PUBLIC_API_BASE_URL", "https://ecomerce-api.nvnhan0810.com"), "/"),
 	}
 }
 

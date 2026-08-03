@@ -17,12 +17,13 @@ type UpdateProductCommand struct {
 }
 
 type UpdateProductHandler struct {
-	repo      domain.ProductRepository
-	merchants domain.MerchantChecker
+	repo       domain.ProductRepository
+	merchants  domain.MerchantChecker
+	publicBase string
 }
 
-func NewUpdateProductHandler(repo domain.ProductRepository, merchants domain.MerchantChecker) *UpdateProductHandler {
-	return &UpdateProductHandler{repo: repo, merchants: merchants}
+func NewUpdateProductHandler(repo domain.ProductRepository, merchants domain.MerchantChecker, publicBase string) *UpdateProductHandler {
+	return &UpdateProductHandler{repo: repo, merchants: merchants, publicBase: publicBase}
 }
 
 func (h *UpdateProductHandler) Handle(_ context.Context, cmd UpdateProductCommand) (ProductResult, error) {
@@ -43,5 +44,5 @@ func (h *UpdateProductHandler) Handle(_ context.Context, cmd UpdateProductComman
 	if err := h.repo.Save(product); err != nil {
 		return ProductResult{}, err
 	}
-	return toProductResult(product), nil
+	return toProductResult(product, h.publicBase), nil
 }

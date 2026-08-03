@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/domain"
+	"github.com/nvnhan0810/ecomerce-api/internal/platform/storage"
 )
 
 type memoryRepo struct {
@@ -68,7 +69,7 @@ func (s stubMerchants) EnsureExists(merchantID string) error {
 func TestCreateProductHandler_should_create_when_valid(t *testing.T) {
 	t.Parallel()
 	repo := newMemoryRepo()
-	h := NewCreateProductHandler(repo, stubMerchants{ids: map[string]struct{}{"m1": {}}})
+	h := NewCreateProductHandler(repo, stubMerchants{ids: map[string]struct{}{"m1": {}}}, "https://ecomerce-api.nvnhan0810.com")
 	res, err := h.Handle(context.Background(), CreateProductCommand{
 		MerchantID:  "m1",
 		Name:        "Giày chạy",
@@ -90,7 +91,7 @@ func TestCreateProductHandler_should_create_when_valid(t *testing.T) {
 
 func TestCreateProductHandler_should_reject_unknown_merchant(t *testing.T) {
 	t.Parallel()
-	h := NewCreateProductHandler(newMemoryRepo(), stubMerchants{ids: map[string]struct{}{}})
+	h := NewCreateProductHandler(newMemoryRepo(), stubMerchants{ids: map[string]struct{}{}}, "")
 	_, err := h.Handle(context.Background(), CreateProductCommand{
 		MerchantID: "missing", Name: "X", PriceCents: 1000, Stock: 1,
 	})
@@ -103,7 +104,7 @@ func TestUpdateAndDeleteProduct(t *testing.T) {
 	t.Parallel()
 	repo := newMemoryRepo()
 	merchants := stubMerchants{ids: map[string]struct{}{"m1": {}, "m2": {}}}
-	create := NewCreateProductHandler(repo, merchants)
+	create := NewCreateProductHandler(repo, merchants, "")
 	created, err := create.Handle(context.Background(), CreateProductCommand{
 		MerchantID: "m1", Name: "Old", PriceCents: 10000, Stock: 2,
 	})
@@ -112,7 +113,7 @@ func TestUpdateAndDeleteProduct(t *testing.T) {
 	}
 	id := domain.ProductID(created.ID)
 
-	update := NewUpdateProductHandler(repo, merchants)
+	update := NewUpdateProductHandler(repo, merchants, "")
 	updated, err := update.Handle(context.Background(), UpdateProductCommand{
 		ID: id, MerchantID: "m2", Name: "New", Description: "d", PriceCents: 20000, Currency: "VND", Stock: 3,
 	})
@@ -123,7 +124,7 @@ func TestUpdateAndDeleteProduct(t *testing.T) {
 		t.Fatalf("unexpected update: %+v", updated)
 	}
 
-	del := NewDeleteProductHandler(repo)
+	del := NewDeleteProductHandler(repo, storage.NopStore{})
 	if err := del.Handle(context.Background(), DeleteProductCommand{ID: id}); err != nil {
 		t.Fatal(err)
 	}

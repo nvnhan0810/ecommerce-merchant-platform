@@ -20,6 +20,7 @@ import (
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/config"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/httpapi"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/seed"
+	"github.com/nvnhan0810/ecomerce-api/internal/platform/storage"
 )
 
 func newTestServer(t *testing.T) http.Handler {
@@ -37,6 +38,8 @@ func newTestServer(t *testing.T) http.Handler {
 		t.Fatal(err)
 	}
 	checker := cataloginfra.NewAccountMerchantChecker(merchants)
+	nop := storage.NopStore{}
+	base := "https://ecomerce-api.nvnhan0810.com"
 	return httpapi.NewRouter(httpapi.Dependencies{
 		Config: config.Config{
 			HTTPAddr:    ":0",
@@ -45,11 +48,14 @@ func newTestServer(t *testing.T) http.Handler {
 		},
 		Health: healthpres.NewHealthHandler("test"),
 		Catalog: catalogpres.NewCatalogHandler(
-			queries.NewListProductsHandler(productRepo),
-			queries.NewGetProductHandler(productRepo),
-			commands.NewCreateProductHandler(productRepo, checker),
-			commands.NewUpdateProductHandler(productRepo, checker),
-			commands.NewDeleteProductHandler(productRepo),
+			queries.NewListProductsHandler(productRepo, base),
+			queries.NewGetProductHandler(productRepo, base),
+			commands.NewCreateProductHandler(productRepo, checker, base),
+			commands.NewUpdateProductHandler(productRepo, checker, base),
+			commands.NewDeleteProductHandler(productRepo, nop),
+			commands.NewUploadProductImageHandler(productRepo, nop, base),
+			commands.NewDeleteProductImageHandler(productRepo, nop, base),
+			nop,
 		),
 		Identity: identitypres.NewIdentityHandler(
 			identityqueries.NewListUsersHandler(users),
