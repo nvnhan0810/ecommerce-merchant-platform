@@ -41,7 +41,6 @@ func NewRouter(deps Dependencies) http.Handler {
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Get("/products", deps.Catalog.ListProducts)
-		api.Post("/products", deps.Catalog.CreateProduct)
 
 		api.Post("/auth/login", deps.Identity.Login)
 
@@ -59,6 +58,10 @@ func NewRouter(deps Dependencies) http.Handler {
 			admin.Get("/users/{id}", deps.Identity.GetUser)
 			admin.Put("/users/{id}", deps.Identity.UpdateUser)
 			admin.Delete("/users/{id}", deps.Identity.DeleteUser)
+			admin.Post("/products", deps.Catalog.CreateProduct)
+			admin.Get("/products/{id}", deps.Catalog.GetProduct)
+			admin.Put("/products/{id}", deps.Catalog.UpdateProduct)
+			admin.Delete("/products/{id}", deps.Catalog.DeleteProduct)
 		})
 	})
 

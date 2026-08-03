@@ -1,4 +1,4 @@
-.PHONY: api web merchant admin test seed migrate-up migrate-down migrate-refresh migrate-status migrate-version
+.PHONY: api web merchant admin test seed seed-products migrate-up migrate-down migrate-refresh migrate-status migrate-version
 
 api:
 	cd api && go run ./cmd/server
@@ -32,6 +32,9 @@ migrate-version:
 # Host CLI: insert/ensure demo users, merchants, admins, products (idempotent).
 seed:
 	cd api && DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed
+
+seed-products:
+	cd api && DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed products
 
 test:
 	cd api && go test ./...

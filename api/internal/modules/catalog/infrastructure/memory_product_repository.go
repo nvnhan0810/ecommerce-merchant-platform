@@ -62,3 +62,20 @@ func (r *InMemoryProductRepository) Count() (int, error) {
 	defer r.mu.RUnlock()
 	return len(r.items), nil
 }
+
+func (r *InMemoryProductRepository) Delete(id domain.ProductID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.items[id]; !ok {
+		return domain.ErrProductNotFound
+	}
+	delete(r.items, id)
+	next := make([]domain.ProductID, 0, len(r.order))
+	for _, existing := range r.order {
+		if existing != id {
+			next = append(next, existing)
+		}
+	}
+	r.order = next
+	return nil
+}

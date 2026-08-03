@@ -20,6 +20,14 @@ func RunDemo(
 	if err := identityinfra.SeedDemoAccounts(users, merchants, admins, hasher, adminPassword); err != nil {
 		return fmt.Errorf("accounts: %w", err)
 	}
+	if err := RunProducts(products, merchants); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RunProducts seeds demo products linked to existing merchants.
+func RunProducts(products domain.ProductRepository, merchants identitydomain.AccountRepository) error {
 	if err := cataloginfra.SeedDemoProducts(products, merchants); err != nil {
 		return fmt.Errorf("products: %w", err)
 	}
@@ -36,4 +44,5 @@ func LogSummary(adminPassword string) {
 	log.Printf("  admin     ops@ecomerce.local / %s", adminPassword)
 	log.Println("  merchant  shop@ecomerce.local / Shop@123456 (+ fashion/tech/home)")
 	log.Println("  user      buyer@ecomerce.local / Buyer@123456 (+ an/binh/chi)")
+	log.Printf("  products  %d demo SKUs across shop/fashion/tech/home", len(cataloginfra.DemoProducts()))
 }

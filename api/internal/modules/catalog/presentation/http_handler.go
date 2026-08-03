@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/application/commands"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/application/queries"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/domain"
@@ -13,14 +14,20 @@ import (
 
 type CatalogHandler struct {
 	list   *queries.ListProductsHandler
+	get    *queries.GetProductHandler
 	create *commands.CreateProductHandler
+	update *commands.UpdateProductHandler
+	delete *commands.DeleteProductHandler
 }
 
 func NewCatalogHandler(
 	list *queries.ListProductsHandler,
+	get *queries.GetProductHandler,
 	create *commands.CreateProductHandler,
+	update *commands.UpdateProductHandler,
+	delete *commands.DeleteProductHandler,
 ) *CatalogHandler {
-	return &CatalogHandler{list: list, create: create}
+	return &CatalogHandler{list: list, get: get, create: create, update: update, delete: delete}
 }
 
 func (h *CatalogHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +41,7 @@ func (h *CatalogHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": items})
 }
 
-type createProductRequest struct {
+type productBody struct {
 	MerchantID  string `json:"merchant_id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -44,7 +51,7 @@ type createProductRequest struct {
 }
 
 func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
-	var body createProductRequest
+	var body productBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
@@ -58,14 +65,78 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		Stock:       body.Stock,
 	})
 	if err != nil {
-		status := http.StatusBadRequest
-		if !errors.Is(err, domain.ErrInvalidProductName) && !errors.Is(err, domain.ErrInvalidProductPrice) {
-			status = http.StatusInternalServerError
-		}
-		writeError(w, status, err.Error())
+		writeCatalogError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, res)
+	writeJSON(w, http.StatusCreated, map[string]any{"data": res})
+}
+
+func (h *CatalogHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	item, err := h.get.Handle(r.Context(), queries.GetProductQuery{ID: id})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+func (h *CatalogHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	var body productBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.update.Handle(r.Context(), commands.UpdateProductCommand{
+		ID:          id,
+		MerchantID:  body.MerchantID,
+		Name:        body.Name,
+		Description: body.Description,
+		PriceCents:  body.PriceCents,
+		Currency:    body.Currency,
+		Stock:       body.Stock,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
+func (h *CatalogHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	if err := h.delete.Handle(r.Context(), commands.DeleteProductCommand{ID: id}); err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func writeCatalogError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	switch {
+	case errors.Is(err, domain.ErrProductNotFound), errors.Is(err, domain.ErrMerchantNotFound):
+		status = http.StatusNotFound
+	case errors.Is(err, domain.ErrInvalidProductName),
+		errors.Is(err, domain.ErrInvalidProductPrice),
+		errors.Is(err, domain.ErrMerchantRequired),
+		errors.Is(err, domain.ErrInvalidProductID):
+		status = http.StatusBadRequest
+	}
+	writeError(w, status, err.Error())
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

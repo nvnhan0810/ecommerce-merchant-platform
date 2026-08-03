@@ -22,6 +22,7 @@ function logout(): void {
         <RouterLink to="/">Overview</RouterLink>
         <RouterLink to="/users">Users</RouterLink>
         <RouterLink to="/merchants">Merchants</RouterLink>
+        <RouterLink to="/products">Products</RouterLink>
       </nav>
       <div class="footer">
         <p v-if="session" class="user">{{ session.displayName }}</p>

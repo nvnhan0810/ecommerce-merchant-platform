@@ -15,29 +15,51 @@ type CreateProductCommand struct {
 	Stock       int
 }
 
-type CreateProductResult struct {
-	ID string `json:"id"`
+type ProductResult struct {
+	ID          string `json:"id"`
+	MerchantID  string `json:"merchant_id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	PriceCents  int64  `json:"price_cents"`
+	Currency    string `json:"currency"`
+	Stock       int    `json:"stock"`
 }
 
 type CreateProductHandler struct {
-	repo domain.ProductRepository
+	repo      domain.ProductRepository
+	merchants domain.MerchantChecker
 }
 
-func NewCreateProductHandler(repo domain.ProductRepository) *CreateProductHandler {
-	return &CreateProductHandler{repo: repo}
+func NewCreateProductHandler(repo domain.ProductRepository, merchants domain.MerchantChecker) *CreateProductHandler {
+	return &CreateProductHandler{repo: repo, merchants: merchants}
 }
 
-func (h *CreateProductHandler) Handle(_ context.Context, cmd CreateProductCommand) (CreateProductResult, error) {
+func (h *CreateProductHandler) Handle(_ context.Context, cmd CreateProductCommand) (ProductResult, error) {
+	if err := h.merchants.EnsureExists(cmd.MerchantID); err != nil {
+		return ProductResult{}, err
+	}
 	price, err := domain.NewMoney(cmd.PriceCents, cmd.Currency)
 	if err != nil {
-		return CreateProductResult{}, err
+		return ProductResult{}, err
 	}
 	product, err := domain.NewProduct(cmd.MerchantID, cmd.Name, cmd.Description, price, cmd.Stock)
 	if err != nil {
-		return CreateProductResult{}, err
+		return ProductResult{}, err
 	}
 	if err := h.repo.Save(product); err != nil {
-		return CreateProductResult{}, err
+		return ProductResult{}, err
 	}
-	return CreateProductResult{ID: string(product.ID)}, nil
+	return toProductResult(product), nil
+}
+
+func toProductResult(product domain.Product) ProductResult {
+	return ProductResult{
+		ID:          string(product.ID),
+		MerchantID:  product.MerchantID,
+		Name:        product.Name,
+		Description: product.Description,
+		PriceCents:  product.Price.AmountCents,
+		Currency:    product.Price.Currency,
+		Stock:       product.Stock,
+	}
 }
