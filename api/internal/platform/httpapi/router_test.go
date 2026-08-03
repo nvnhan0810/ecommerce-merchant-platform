@@ -19,21 +19,21 @@ import (
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/config"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/httpapi"
+	"github.com/nvnhan0810/ecomerce-api/internal/platform/seed"
 )
 
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
 	productRepo := cataloginfra.NewInMemoryProductRepository()
-	if err := cataloginfra.SeedDemoProducts(productRepo); err != nil {
-		t.Fatal(err)
-	}
-	userRepo := identityinfra.NewInMemoryUserRepository()
+	users := identityinfra.NewInMemoryAccountRepository()
+	merchants := identityinfra.NewInMemoryAccountRepository()
+	admins := identityinfra.NewInMemoryAccountRepository()
 	hasher := identityinfra.NewBcryptPasswordHasher()
 	tokens, err := identityinfra.NewJWTTokenService("test-jwt-secret-16", 2*time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := identityinfra.SeedDemoUsers(userRepo, hasher, "Admin@123456"); err != nil {
+	if err := seed.RunDemo(users, merchants, admins, productRepo, hasher, "Admin@123456"); err != nil {
 		t.Fatal(err)
 	}
 	return httpapi.NewRouter(httpapi.Dependencies{
@@ -48,9 +48,14 @@ func newTestServer(t *testing.T) http.Handler {
 			commands.NewCreateProductHandler(productRepo),
 		),
 		Identity: identitypres.NewIdentityHandler(
-			identityqueries.NewListUsersByRoleHandler(userRepo),
-			identitycommands.NewLoginHandler(userRepo, hasher, tokens),
-			identityqueries.NewGetCurrentUserHandler(userRepo),
+			identityqueries.NewListUsersHandler(users),
+			identityqueries.NewListMerchantsHandler(merchants),
+			identityqueries.NewGetMerchantHandler(merchants),
+			identitycommands.NewLoginHandler(admins, hasher, tokens),
+			identityqueries.NewGetCurrentUserHandler(admins),
+			identitycommands.NewCreateMerchantHandler(merchants, hasher),
+			identitycommands.NewUpdateMerchantHandler(merchants, hasher),
+			identitycommands.NewDeleteMerchantHandler(merchants),
 		),
 		Tokens: tokens,
 	})
@@ -78,16 +83,15 @@ func TestListProducts_should_return_seeded_items(t *testing.T) {
 	}
 }
 
-func TestLogin_should_return_token_for_admin(t *testing.T) {
-	t.Parallel()
-	srv := newTestServer(t)
+func adminToken(t *testing.T, srv http.Handler) string {
+	t.Helper()
 	body := bytes.NewBufferString(`{"email":"admin@ecomerce.local","password":"Admin@123456"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("login status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var payload struct {
 		AccessToken string `json:"access_token"`
@@ -95,12 +99,15 @@ func TestLogin_should_return_token_for_admin(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.AccessToken == "" {
-		t.Fatal("expected access token")
-	}
+	return payload.AccessToken
+}
 
+func TestLogin_should_return_token_for_admin(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+	token := adminToken(t, srv)
 	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
-	meReq.Header.Set("Authorization", "Bearer "+payload.AccessToken)
+	meReq.Header.Set("Authorization", "Bearer "+token)
 	meRec := httptest.NewRecorder()
 	srv.ServeHTTP(meRec, meReq)
 	if meRec.Code != http.StatusOK {
@@ -116,5 +123,47 @@ func TestMerchants_should_require_admin_token(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rec.Code)
+	}
+}
+
+func TestMerchantCRUD_should_create_update_delete(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+	token := adminToken(t, srv)
+
+	createBody := bytes.NewBufferString(`{"email":"crudshop@ecomerce.local","display_name":"CRUD Shop","password":"Shop@123456"}`)
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/merchants", createBody)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createRec := httptest.NewRecorder()
+	srv.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	updateBody := bytes.NewBufferString(`{"email":"crudshop2@ecomerce.local","display_name":"CRUD Shop 2","password":""}`)
+	updateReq := httptest.NewRequest(http.MethodPut, "/api/v1/merchants/"+created.Data.ID, updateBody)
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.Header.Set("Authorization", "Bearer "+token)
+	updateRec := httptest.NewRecorder()
+	srv.ServeHTTP(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update status=%d body=%s", updateRec.Code, updateRec.Body.String())
+	}
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/merchants/"+created.Data.ID, nil)
+	delReq.Header.Set("Authorization", "Bearer "+token)
+	delRec := httptest.NewRecorder()
+	srv.ServeHTTP(delRec, delReq)
+	if delRec.Code != http.StatusNoContent {
+		t.Fatalf("delete status=%d body=%s", delRec.Code, delRec.Body.String())
 	}
 }

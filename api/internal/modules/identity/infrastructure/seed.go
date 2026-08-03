@@ -2,68 +2,109 @@ package infrastructure
 
 import "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
 
-func SeedDemoUsers(repo domain.UserRepository, hasher domain.PasswordHasher, adminPassword string) error {
-	type counter interface {
-		Count() (int, error)
-	}
-	if c, ok := repo.(counter); ok {
-		n, err := c.Count()
-		if err != nil {
-			return err
-		}
-		if n == 0 {
-			samples := []struct {
-				email, name, password string
-				role                  domain.Role
-			}{
-				{"buyer@ecomerce.local", "Buyer Demo", "Buyer@123456", domain.RoleUser},
-				{"shop@ecomerce.local", "Shop Demo", "Shop@123456", domain.RoleMerchant},
-				{"admin@ecomerce.local", "Admin Demo", adminPassword, domain.RoleAdmin},
-			}
-			for _, s := range samples {
-				u, err := domain.NewUser(s.email, s.name, s.role)
-				if err != nil {
-					return err
-				}
-				if err := u.SetPassword(hasher, s.password); err != nil {
-					return err
-				}
-				if err := repo.Save(u); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return EnsureAdminUser(repo, hasher, "admin@ecomerce.local", "Admin Demo", adminPassword)
+// DemoAccount is one row to ensure in users / merchants / admins.
+type DemoAccount struct {
+	Email       string
+	DisplayName string
+	Password    string
 }
 
-// EnsureAdminUser creates or updates the bootstrap admin password.
-func EnsureAdminUser(
-	repo domain.UserRepository,
+func DemoUsers() []DemoAccount {
+	return []DemoAccount{
+		{Email: "buyer@ecomerce.local", DisplayName: "Buyer Demo", Password: "Buyer@123456"},
+		{Email: "an@ecomerce.local", DisplayName: "Nguyễn An", Password: "Buyer@123456"},
+		{Email: "binh@ecomerce.local", DisplayName: "Trần Bình", Password: "Buyer@123456"},
+		{Email: "chi@ecomerce.local", DisplayName: "Lê Chi", Password: "Buyer@123456"},
+	}
+}
+
+func DemoMerchants() []DemoAccount {
+	return []DemoAccount{
+		{Email: "shop@ecomerce.local", DisplayName: "Shop Demo", Password: "Shop@123456"},
+		{Email: "fashion@ecomerce.local", DisplayName: "Fashion House", Password: "Shop@123456"},
+		{Email: "tech@ecomerce.local", DisplayName: "Tech Store", Password: "Shop@123456"},
+		{Email: "home@ecomerce.local", DisplayName: "Home Living", Password: "Shop@123456"},
+	}
+}
+
+func DemoAdmins(adminPassword string) []DemoAccount {
+	if adminPassword == "" {
+		adminPassword = "Admin@123456"
+	}
+	return []DemoAccount{
+		{Email: "admin@ecomerce.local", DisplayName: "Admin Demo", Password: adminPassword},
+		{Email: "ops@ecomerce.local", DisplayName: "Ops Admin", Password: adminPassword},
+	}
+}
+
+// SeedDemoAccounts ensures demo rows in users, merchants, and admins (idempotent by email).
+func SeedDemoAccounts(
+	users domain.AccountRepository,
+	merchants domain.AccountRepository,
+	admins domain.AccountRepository,
 	hasher domain.PasswordHasher,
-	email, displayName, password string,
+	adminPassword string,
 ) error {
-	existing, err := repo.FindByEmail(email)
-	if err != nil && err != domain.ErrUserNotFound {
+	for _, a := range DemoUsers() {
+		if err := EnsureAccount(users, hasher, a); err != nil {
+			return err
+		}
+	}
+	for _, a := range DemoMerchants() {
+		if err := EnsureAccount(merchants, hasher, a); err != nil {
+			return err
+		}
+	}
+	for _, a := range DemoAdmins(adminPassword) {
+		if err := EnsureAccount(admins, hasher, a); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func EnsureAccount(repo domain.AccountRepository, hasher domain.PasswordHasher, demo DemoAccount) error {
+	existing, err := repo.FindByEmail(demo.Email)
+	if err != nil && err != domain.ErrAccountNotFound {
 		return err
 	}
-	if err == domain.ErrUserNotFound {
-		u, err := domain.NewUser(email, displayName, domain.RoleAdmin)
+	if err == domain.ErrAccountNotFound {
+		account, err := domain.NewAccount(demo.Email, demo.DisplayName)
 		if err != nil {
 			return err
 		}
-		if err := u.SetPassword(hasher, password); err != nil {
+		if err := account.SetPassword(hasher, demo.Password); err != nil {
 			return err
 		}
-		return repo.Save(u)
+		return repo.Save(account)
 	}
-	if existing.PasswordHash == "" || existing.Role != domain.RoleAdmin {
-		existing.Role = domain.RoleAdmin
-		if err := existing.SetPassword(hasher, password); err != nil {
+
+	changed := false
+	if existing.DisplayName == "" && demo.DisplayName != "" {
+		existing.Rename(demo.DisplayName)
+		changed = true
+	}
+	if existing.PasswordHash == "" {
+		if err := existing.SetPassword(hasher, demo.Password); err != nil {
 			return err
 		}
+		changed = true
+	}
+	if changed {
 		return repo.Save(existing)
 	}
 	return nil
+}
+
+// EnsureAdminAccount keeps the bootstrap admin helper used by older call sites.
+func EnsureAdminAccount(
+	repo domain.AccountRepository,
+	hasher domain.PasswordHasher,
+	email, displayName, password string,
+) error {
+	return EnsureAccount(repo, hasher, DemoAccount{
+		Email:       email,
+		DisplayName: displayName,
+		Password:    password,
+	})
 }
