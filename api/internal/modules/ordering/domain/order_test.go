@@ -86,10 +86,17 @@ func TestNewOrder_ok(t *testing.T) {
 	if len(o.Items) != 2 {
 		t.Fatalf("items=%d", len(o.Items))
 	}
-	if err := o.ChangeStatus(StatusPaid); err != nil {
+	o.RecordCreated(Actor{ID: "u1", Email: "buyer@x", Role: "user", DisplayName: "Buyer"})
+	if err := o.ChangeStatus(StatusPaid, Actor{ID: "a1", Email: "admin@x", Role: "admin", DisplayName: "Admin"}); err != nil {
 		t.Fatal(err)
 	}
 	if o.Status != StatusPaid {
 		t.Fatalf("status after change=%s", o.Status)
+	}
+	if len(o.PendingEvents()) != 2 {
+		t.Fatalf("pending events=%d", len(o.PendingEvents()))
+	}
+	if len(o.History) != 2 {
+		t.Fatalf("history=%d", len(o.History))
 	}
 }

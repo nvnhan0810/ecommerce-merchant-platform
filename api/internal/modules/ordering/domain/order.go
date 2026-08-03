@@ -115,8 +115,145 @@ type Order struct {
 	TotalCents int64
 	Note       string
 	Items      []OrderItem
+	History    []OrderEvent
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+
+	pendingEvents []OrderEvent
+}
+
+type Actor struct {
+	ID          string
+	Email       string
+	Role        string
+	DisplayName string
+}
+
+func SystemActor() Actor {
+	return Actor{Role: "system", DisplayName: "Hệ thống"}
+}
+
+type OrderEventType string
+
+const (
+	EventCreated       OrderEventType = "created"
+	EventStatusChanged OrderEventType = "status_changed"
+	EventCancelled     OrderEventType = "cancelled"
+)
+
+func (t OrderEventType) LabelVI() string {
+	switch t {
+	case EventCreated:
+		return "Tạo đơn"
+	case EventStatusChanged:
+		return "Đổi trạng thái"
+	case EventCancelled:
+		return "Huỷ đơn"
+	default:
+		return string(t)
+	}
+}
+
+type OrderEventID string
+
+func NewOrderEventID() OrderEventID { return OrderEventID(uuid.NewString()) }
+
+type OrderEvent struct {
+	ID         OrderEventID
+	OrderID    OrderID
+	Type       OrderEventType
+	FromStatus OrderStatus
+	ToStatus   OrderStatus
+	Message    string
+	ActorID    string
+	ActorEmail string
+	ActorRole  string
+	ActorName  string
+	CreatedAt  time.Time
+}
+
+func (o *Order) PendingEvents() []OrderEvent {
+	return append([]OrderEvent(nil), o.pendingEvents...)
+}
+
+func (o *Order) ClearPendingEvents() {
+	o.pendingEvents = nil
+}
+
+func (o *Order) RecordCreated(actor Actor) {
+	now := time.Now().UTC()
+	if o.CreatedAt.IsZero() {
+		o.CreatedAt = now
+	}
+	ev := OrderEvent{
+		ID:         NewOrderEventID(),
+		OrderID:    o.ID,
+		Type:       EventCreated,
+		ToStatus:   StatusNew,
+		Message:    "Tạo đơn hàng",
+		ActorID:    strings.TrimSpace(actor.ID),
+		ActorEmail: strings.TrimSpace(actor.Email),
+		ActorRole:  strings.TrimSpace(actor.Role),
+		ActorName:  strings.TrimSpace(actor.DisplayName),
+		CreatedAt:  o.CreatedAt,
+	}
+	if ev.ActorName == "" {
+		ev.ActorName = ev.ActorEmail
+	}
+	if ev.ActorRole == "" {
+		ev.ActorRole = "user"
+	}
+	o.pendingEvents = append(o.pendingEvents, ev)
+	o.History = append(o.History, ev)
+}
+
+func (o *Order) ChangeStatus(status OrderStatus, actor Actor) error {
+	if _, err := ParseOrderStatus(string(status)); err != nil {
+		return err
+	}
+	if status == o.Status {
+		return nil
+	}
+	from := o.Status
+	now := time.Now().UTC()
+	o.Status = status
+	o.UpdatedAt = now
+
+	eventType := EventStatusChanged
+	message := "Đổi trạng thái từ " + from.LabelVI() + " sang " + status.LabelVI()
+	if status == StatusCancelled {
+		eventType = EventCancelled
+		message = "Huỷ đơn hàng"
+		if from != StatusNew {
+			message = "Huỷ đơn hàng (từ " + from.LabelVI() + ")"
+		}
+	}
+
+	ev := OrderEvent{
+		ID:         NewOrderEventID(),
+		OrderID:    o.ID,
+		Type:       eventType,
+		FromStatus: from,
+		ToStatus:   status,
+		Message:    message,
+		ActorID:    strings.TrimSpace(actor.ID),
+		ActorEmail: strings.TrimSpace(actor.Email),
+		ActorRole:  strings.TrimSpace(actor.Role),
+		ActorName:  strings.TrimSpace(actor.DisplayName),
+		CreatedAt:  now,
+	}
+	if ev.ActorName == "" {
+		ev.ActorName = ev.ActorEmail
+	}
+	if ev.ActorName == "" {
+		ev.ActorName = "Hệ thống"
+	}
+	if ev.ActorRole == "" {
+		ev.ActorRole = "system"
+	}
+	o.pendingEvents = append(o.pendingEvents, ev)
+	o.History = append(o.History, ev)
+	return nil
 }
 
 // NewOrderCode returns a random tracking code (letters + digits), e.g. "K7M2P9QX4A".
@@ -212,18 +349,18 @@ func NewOrder(userID, merchantID, currency, note string, lines []OrderLineInput)
 	}, nil
 }
 
-func (o *Order) ChangeStatus(status OrderStatus) error {
-	if _, err := ParseOrderStatus(string(status)); err != nil {
-		return err
-	}
-	o.Status = status
-	o.UpdatedAt = time.Now().UTC()
-	return nil
-}
-
 type OrderRepository interface {
 	Save(order Order) error
 	FindByID(id OrderID) (Order, error)
+	FindByCode(code string) (Order, error)
 	List(limit, offset int) ([]Order, error)
 	Count() (int, error)
+}
+
+// AllOrderStatuses returns statuses in display order.
+func AllOrderStatuses() []OrderStatus {
+	return []OrderStatus{
+		StatusNew, StatusPaid, StatusConfirmed, StatusShipping,
+		StatusSucceeded, StatusFailed, StatusCancelled,
+	}
 }

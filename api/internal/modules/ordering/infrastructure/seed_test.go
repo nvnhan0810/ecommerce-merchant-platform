@@ -56,6 +56,12 @@ func TestSeedDemoOrders_should_create_one_per_status(t *testing.T) {
 		if len(o.Items) == 0 {
 			t.Fatal("order has no items")
 		}
+		if len(o.History) == 0 {
+			t.Fatalf("order %s missing history", o.Code)
+		}
+		if o.History[0].Type != domain.EventCreated {
+			t.Fatalf("first history event=%s want created", o.History[0].Type)
+		}
 		for _, item := range o.Items {
 			// product merchant ownership already enforced at NewOrder time
 			if item.ProductID == "" {

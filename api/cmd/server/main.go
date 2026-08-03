@@ -18,7 +18,10 @@ import (
 	identityqueries "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/queries"
 	identityinfra "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/infrastructure"
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
+	orderingcommands "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/application/commands"
+	orderingqueries "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/application/queries"
 	orderinginfra "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/infrastructure"
+	orderingpres "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/presentation"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/config"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/envfile"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/httpapi"
@@ -99,6 +102,11 @@ func main() {
 			identitycommands.NewCreateMerchantHandler(merchantRepo, hasher),
 			identitycommands.NewUpdateMerchantHandler(merchantRepo, hasher),
 			identitycommands.NewDeleteMerchantHandler(merchantRepo),
+		),
+		Ordering: orderingpres.NewOrderingHandler(
+			orderingqueries.NewListOrdersHandler(orderRepo),
+			orderingqueries.NewGetOrderHandler(orderRepo),
+			orderingcommands.NewUpdateOrderStatusHandler(orderRepo),
 		),
 		Tokens: tokens,
 	})
