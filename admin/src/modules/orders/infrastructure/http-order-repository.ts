@@ -64,6 +64,11 @@ type OrderApiItem = {
   shipping_name?: string
   shipping_phone?: string
   shipping_address?: string
+  payment_method?: string
+  payment_method_label?: string
+  payment_status?: string
+  payment_status_label?: string
+  payment_id?: string
   items: OrderItemApi[]
   history?: OrderEventApi[]
   delivery_events?: DeliveryEventApi[]
@@ -120,6 +125,11 @@ function mapOrder(item: OrderApiItem): Order {
     item.shipping_name ?? '',
     item.shipping_phone ?? '',
     item.shipping_address ?? '',
+    item.payment_method ?? 'cod',
+    item.payment_method_label ?? 'Thanh toán khi giao hàng',
+    item.payment_status ?? 'unpaid',
+    item.payment_status_label ?? 'Chưa thanh toán',
+    item.payment_id ?? '',
     (item.items ?? []).map(
       (line) =>
         new OrderItem(

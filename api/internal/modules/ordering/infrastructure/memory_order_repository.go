@@ -164,6 +164,16 @@ func cloneOrder(o domain.Order) domain.Order {
 	cp.Items = append([]domain.OrderItem(nil), o.Items...)
 	cp.History = append([]domain.OrderEvent(nil), o.History...)
 	cp.DeliveryEvents = append([]domain.DeliveryEvent(nil), o.DeliveryEvents...)
+	if o.PaidAt != nil {
+		t := o.PaidAt.UTC()
+		cp.PaidAt = &t
+	}
+	if cp.PaymentMethod == "" {
+		cp.PaymentMethod = domain.PaymentMethodCOD
+	}
+	if cp.PaymentStatus == "" {
+		cp.PaymentStatus = domain.PaymentStatusUnpaid
+	}
 	cp.ClearPendingEvents()
 	cp.ClearPendingDeliveryEvents()
 	return cp

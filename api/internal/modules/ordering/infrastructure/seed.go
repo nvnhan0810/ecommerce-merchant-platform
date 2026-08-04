@@ -82,7 +82,7 @@ func SeedDemoOrders(
 			return fmt.Errorf("seed order: merchant %q has no products", spec.merchantEmail)
 		}
 		p := merchantProducts[0]
-		order, err := domain.NewOrder(string(user.ID), string(merchant.ID), p.Price.Currency, spec.note, "Demo User", "0987654321", "123 Demo St", []domain.OrderLineInput{{
+		order, err := domain.NewOrder(string(user.ID), string(merchant.ID), p.Price.Currency, spec.note, "Demo User", "0987654321", "123 Demo St", domain.PaymentMethodCOD, []domain.OrderLineInput{{
 			ProductID:      string(p.ID),
 			ProductName:    p.Name,
 			MerchantID:     p.MerchantID,

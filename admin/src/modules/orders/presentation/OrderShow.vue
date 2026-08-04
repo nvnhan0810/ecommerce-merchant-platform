@@ -102,6 +102,10 @@ function actorLabel(name: string, email: string, role: string): string {
           <dd>{{ merchantLabel }}</dd>
         </div>
         <div class="meta-item">
+          <dt>Thanh toán</dt>
+          <dd>{{ order.paymentMethodLabel }} · {{ order.paymentStatusLabel }}</dd>
+        </div>
+        <div class="meta-item">
           <dt>Tạo lúc</dt>
           <dd>{{ formatDate(order.createdAt) }}</dd>
         </div>

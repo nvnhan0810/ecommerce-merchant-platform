@@ -1,13 +1,15 @@
 import { useState, type JSX } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/modules/auth/presentation/AuthProvider'
-import { GetMyOrderUseCase } from '@/modules/orders/application/order-use-cases'
+import { GetMyOrderUseCase, RepayOrderUseCase } from '@/modules/orders/application/order-use-cases'
 import { HttpOrderRepository } from '@/modules/orders/infrastructure/http-order-repository'
 import { OrderStatusBadge } from './OrderStatusBadge'
 import styles from './OrderDetailPage.module.css'
 
-const getOrder = new GetMyOrderUseCase(new HttpOrderRepository())
+const orderRepo = new HttpOrderRepository()
+const getOrder = new GetMyOrderUseCase(orderRepo)
+const repayOrder = new RepayOrderUseCase(orderRepo)
 
 function formatMoney(cents: number, currency: string): string {
   return new Intl.NumberFormat('vi-VN', {
@@ -29,10 +31,26 @@ export function OrderDetailPage(): JSX.Element {
   const { session } = useAuth()
   const { id = '' } = useParams()
   const [activeTab, setActiveTab] = useState<'details' | 'tracking'>('details')
+  const [repayError, setRepayError] = useState('')
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['user', 'orders', id],
     queryFn: () => getOrder.execute(id),
     enabled: Boolean(session?.isUser && id),
+  })
+
+  const repayMutation = useMutation({
+    mutationFn: () => repayOrder.execute(id),
+    onSuccess: (result) => {
+      const url = result.payment?.paymentUrl
+      if (url) {
+        window.location.assign(url)
+        return
+      }
+      setRepayError('Không tạo được link thanh toán.')
+    },
+    onError: (err) => {
+      setRepayError((err as Error).message || 'Thanh toán lại thất bại.')
+    },
   })
 
   if (!session?.isUser) {
@@ -60,10 +78,38 @@ export function OrderDetailPage(): JSX.Element {
             <OrderStatusBadge status={data.status} label={data.statusLabel} />
           </div>
 
+          {data.canRepay ? (
+            <div className={styles.repayBox}>
+              <p>
+                {data.paymentStatus === 'failed' || data.status === 'cancelled'
+                  ? 'Thanh toán không thành công. Bạn có thể thanh toán lại để tiếp tục đơn hàng.'
+                  : 'Đơn hàng đang chờ thanh toán. Tiếp tục thanh toán để hoàn tất.'}
+              </p>
+              {repayError ? <p className={styles.repayError}>{repayError}</p> : null}
+              <button
+                type="button"
+                className={styles.repayBtn}
+                disabled={repayMutation.isPending}
+                onClick={() => {
+                  setRepayError('')
+                  repayMutation.mutate()
+                }}
+              >
+                {repayMutation.isPending ? 'Đang chuyển…' : 'Thanh toán lại'}
+              </button>
+            </div>
+          ) : null}
+
           <div className={styles.infoGrid}>
             <div className={styles.infoItem}>
               <span className={styles.infoLabel}>Tổng tiền</span>
               <strong className={styles.totalPrice}>{formatMoney(data.totalCents, data.currency)}</strong>
+            </div>
+            <div className={styles.infoItem}>
+              <span className={styles.infoLabel}>Thanh toán</span>
+              <span>
+                {data.paymentMethodLabel} · {data.paymentStatusLabel}
+              </span>
             </div>
             <div className={styles.infoItem}>
               <span className={styles.infoLabel}>Ngày tạo</span>

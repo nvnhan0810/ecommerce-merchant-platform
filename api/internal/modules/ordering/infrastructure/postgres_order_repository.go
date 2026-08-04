@@ -40,12 +40,30 @@ func (r *PostgresOrderRepository) Save(order domain.Order) error {
 		carrier = domain.DefaultDeliveryCarrier
 	}
 
+	payMethod := order.PaymentMethod
+	if payMethod == "" {
+		payMethod = domain.PaymentMethodCOD
+	}
+	payStatus := order.PaymentStatus
+	if payStatus == "" {
+		payStatus = domain.PaymentStatusUnpaid
+	}
+	var paymentID any
+	if strings.TrimSpace(string(order.PaymentID)) != "" {
+		paymentID = string(order.PaymentID)
+	}
+	var paidAt any
+	if order.PaidAt != nil {
+		paidAt = order.PaidAt.UTC()
+	}
+
 		_, err = tx.Exec(ctx, `
 			INSERT INTO orders (
 				id, code, user_id, merchant_id, status, currency, total_cents, note,
-				delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+				delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address,
+				payment_method, payment_status, payment_id, paid_at, created_at, updated_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 			ON CONFLICT (id) DO UPDATE SET
 				code = EXCLUDED.code,
 				user_id = EXCLUDED.user_id,
@@ -59,9 +77,14 @@ func (r *PostgresOrderRepository) Save(order domain.Order) error {
 				shipping_name = EXCLUDED.shipping_name,
 				shipping_phone = EXCLUDED.shipping_phone,
 				shipping_address = EXCLUDED.shipping_address,
+				payment_method = EXCLUDED.payment_method,
+				payment_status = EXCLUDED.payment_status,
+				payment_id = EXCLUDED.payment_id,
+				paid_at = EXCLUDED.paid_at,
 				updated_at = EXCLUDED.updated_at
 		`, order.ID, order.Code, order.UserID, order.MerchantID, order.Status, order.Currency,
-			order.TotalCents, order.Note, tracking, carrier, order.ShippingName, order.ShippingPhone, order.ShippingAddress, order.CreatedAt, order.UpdatedAt)
+			order.TotalCents, order.Note, tracking, carrier, order.ShippingName, order.ShippingPhone, order.ShippingAddress,
+			payMethod, payStatus, paymentID, paidAt, order.CreatedAt, order.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -127,7 +150,8 @@ func (r *PostgresOrderRepository) FindByID(id domain.OrderID) (domain.Order, err
 
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-		       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+			delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address,
+			payment_method, payment_status, payment_id, paid_at, created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id)
 	return r.hydrate(ctx, row)
@@ -143,7 +167,8 @@ func (r *PostgresOrderRepository) FindByCode(code string) (domain.Order, error) 
 
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-		       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+			delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address,
+			payment_method, payment_status, payment_id, paid_at, created_at, updated_at
 		FROM orders WHERE code = $1
 	`, parsed)
 	return r.hydrate(ctx, row)
@@ -159,7 +184,8 @@ func (r *PostgresOrderRepository) FindByDeliveryTrackingCode(code string) (domai
 
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-		       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+			delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address,
+			payment_method, payment_status, payment_id, paid_at, created_at, updated_at
 		FROM orders WHERE delivery_tracking_code = $1
 	`, code)
 	return r.hydrate(ctx, row)
@@ -207,8 +233,9 @@ func (r *PostgresOrderRepository) List(limit, offset int) ([]domain.Order, error
 		limit = 50
 	}
 	rows, err := r.pool.Query(ctx, `
-			SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-			       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+			delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address,
+			payment_method, payment_status, payment_id, paid_at, created_at, updated_at
 			FROM orders
 			ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -227,8 +254,9 @@ func (r *PostgresOrderRepository) ListByMerchant(merchantID string, limit, offse
 		limit = 50
 	}
 	rows, err := r.pool.Query(ctx, `
-			SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-			       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+			delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address,
+			payment_method, payment_status, payment_id, paid_at, created_at, updated_at
 			FROM orders
 			WHERE merchant_id = $1
 		ORDER BY created_at DESC
@@ -248,8 +276,9 @@ func (r *PostgresOrderRepository) ListByUser(userID string, limit, offset int) (
 		limit = 50
 	}
 	rows, err := r.pool.Query(ctx, `
-			SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-			       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+			delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address,
+			payment_method, payment_status, payment_id, paid_at, created_at, updated_at
 			FROM orders
 			WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -431,13 +460,16 @@ type scannable interface {
 func scanOrder(row scannable) (domain.Order, error) {
 	var (
 		id, code, userID, merchantID, status, currency, note, carrier, shipName, shipPhone, shipAddr string
-		tracking                                                                                     *string
+		payMethod, payStatus                                                                         string
+		tracking, paymentID                                                                          *string
+		paidAt                                                                                       *time.Time
 		total                                                                                        int64
 		createdAt, updatedAt                                                                         time.Time
 	)
 	if err := row.Scan(
 		&id, &code, &userID, &merchantID, &status, &currency, &total, &note,
-		&tracking, &carrier, &shipName, &shipPhone, &shipAddr, &createdAt, &updatedAt,
+		&tracking, &carrier, &shipName, &shipPhone, &shipAddr,
+		&payMethod, &payStatus, &paymentID, &paidAt, &createdAt, &updatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Order{}, domain.ErrOrderNotFound
@@ -455,6 +487,23 @@ func scanOrder(row scannable) (domain.Order, error) {
 	if tracking != nil {
 		trackingCode = *tracking
 	}
+	method, err := domain.ParsePaymentMethod(payMethod)
+	if err != nil {
+		method = domain.PaymentMethodCOD
+	}
+	pStatus, err := domain.ParsePaymentStatus(payStatus)
+	if err != nil {
+		pStatus = domain.PaymentStatusUnpaid
+	}
+	var pid domain.PaymentID
+	if paymentID != nil {
+		pid = domain.PaymentID(*paymentID)
+	}
+	var paidAtUTC *time.Time
+	if paidAt != nil {
+		t := paidAt.UTC()
+		paidAtUTC = &t
+	}
 	return domain.Order{
 		ID:                   domain.OrderID(id),
 		Code:                 code,
@@ -469,6 +518,10 @@ func scanOrder(row scannable) (domain.Order, error) {
 		ShippingName:         shipName,
 		ShippingPhone:        shipPhone,
 		ShippingAddress:      shipAddr,
+		PaymentMethod:        method,
+		PaymentStatus:        pStatus,
+		PaymentID:            pid,
+		PaidAt:               paidAtUTC,
 		CreatedAt:            createdAt.UTC(),
 		UpdatedAt:            updatedAt.UTC(),
 	}, nil

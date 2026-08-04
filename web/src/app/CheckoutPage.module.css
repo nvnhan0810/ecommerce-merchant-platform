@@ -21,7 +21,7 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.5rem;
 }
 
@@ -362,6 +362,55 @@
 .secondaryLink:hover {
   background: #f8fafc;
   color: #0f172a;
+}
+
+.paymentOptions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.paymentOption {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.paymentOption input {
+  margin-top: 0.2rem;
+}
+
+.paymentOption span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.paymentOption strong {
+  font-size: 0.98rem;
+}
+
+.paymentOption small {
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.paymentOptionActive {
+  border-color: #0f766e;
+  background: #f0fdfa;
+}
+
+.paymentOptionDisabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.paymentReview {
+  margin: 0;
+  color: #334155;
 }
 
 @media (max-width: 640px) {

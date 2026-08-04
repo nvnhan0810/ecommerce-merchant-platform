@@ -3,23 +3,27 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useCart } from '@/modules/cart/presentation/CartProvider'
 import { useAuth } from '@/modules/auth/presentation/AuthProvider'
-import { CreateOrderUseCase } from '@/modules/orders/application/order-use-cases'
+import { CreateOrderUseCase, ListPaymentMethodsUseCase } from '@/modules/orders/application/order-use-cases'
 import { HttpOrderRepository } from '@/modules/orders/infrastructure/http-order-repository'
+import type { PaymentMethod } from '@/modules/orders/domain/order'
 import { ListAddressesUseCase } from '@/modules/addresses/application/address-use-cases'
 import { HttpAddressRepository } from '@/modules/addresses/infrastructure/http-address-repository'
 import { formatFullAddress } from '@/modules/addresses/domain/address'
 import { AddressPickerDialog } from './AddressPickerDialog'
 import styles from './CheckoutPage.module.css'
 
-const createOrder = new CreateOrderUseCase(new HttpOrderRepository())
+const orderRepo = new HttpOrderRepository()
+const createOrder = new CreateOrderUseCase(orderRepo)
+const listPaymentMethods = new ListPaymentMethodsUseCase(orderRepo)
 const listAddresses = new ListAddressesUseCase(new HttpAddressRepository())
 
-type Step = 1 | 2 | 3
+type Step = 1 | 2 | 3 | 4
 
 const STEPS: Array<{ id: Step; label: string }> = [
   { id: 1, label: 'Sản phẩm' },
   { id: 2, label: 'Giao hàng' },
-  { id: 3, label: 'Xác nhận' },
+  { id: 3, label: 'Thanh toán' },
+  { id: 4, label: 'Xác nhận' },
 ]
 
 function formatMoney(cents: number, currency: string): string {
@@ -40,12 +44,19 @@ export function CheckoutPage(): JSX.Element {
   const [shippingPhone, setShippingPhone] = useState('')
   const [selectedAddressId, setSelectedAddressId] = useState('')
   const [addressDialogOpen, setAddressDialogOpen] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
 
   const { data: addresses } = useQuery({
     queryKey: ['user-addresses'],
     queryFn: () => listAddresses.execute(),
+    enabled: !!session?.isUser,
+  })
+
+  const { data: paymentMethods } = useQuery({
+    queryKey: ['payment-methods'],
+    queryFn: () => listPaymentMethods.execute(),
     enabled: !!session?.isUser,
   })
 
@@ -61,6 +72,15 @@ export function CheckoutPage(): JSX.Element {
       setSelectedAddressId(defaultAddr ? defaultAddr.id : addresses[0].id)
     }
   }, [addresses, selectedAddressId])
+
+  useEffect(() => {
+    if (!paymentMethods || paymentMethods.length === 0) return
+    const selected = paymentMethods.find((m) => m.method === paymentMethod && m.enabled)
+    if (!selected) {
+      const first = paymentMethods.find((m) => m.enabled)
+      if (first) setPaymentMethod(first.method)
+    }
+  }, [paymentMethods, paymentMethod])
 
   if (!session?.isUser) {
     return <Navigate to="/login" replace state={{ from: '/checkout' }} />
@@ -79,6 +99,7 @@ export function CheckoutPage(): JSX.Element {
 
   const currency = cart.items[0]?.currency || 'VND'
   const selectedAddress = addresses?.find((a) => a.id === selectedAddressId)
+  const selectedPayment = paymentMethods?.find((m) => m.method === paymentMethod)
 
   function goNextFromStep1() {
     setError('')
@@ -102,6 +123,15 @@ export function CheckoutPage(): JSX.Element {
     setStep(3)
   }
 
+  function goNextFromStep3() {
+    setError('')
+    if (!selectedPayment?.enabled) {
+      setError('Vui lòng chọn phương thức thanh toán khả dụng')
+      return
+    }
+    setStep(4)
+  }
+
   async function placeOrder() {
     setError('')
     if (!selectedAddress) {
@@ -109,19 +139,29 @@ export function CheckoutPage(): JSX.Element {
       setStep(2)
       return
     }
+    if (!selectedPayment?.enabled) {
+      setError('Vui lòng chọn phương thức thanh toán khả dụng')
+      setStep(3)
+      return
+    }
 
     setPending(true)
     try {
-      const orders = await createOrder.execute(
+      const result = await createOrder.execute(
         note,
         cart.items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
         shippingName.trim(),
         shippingPhone.trim(),
         formatFullAddress(selectedAddress),
+        paymentMethod,
       )
       clear()
-      if (orders.length === 1) {
-        void navigate(`/orders/${orders[0].id}`)
+      if (result.payment?.paymentUrl) {
+        window.location.assign(result.payment.paymentUrl)
+        return
+      }
+      if (result.orders.length === 1) {
+        void navigate(`/orders/${result.orders[0].id}`)
       } else {
         void navigate('/orders')
       }
@@ -256,7 +296,40 @@ export function CheckoutPage(): JSX.Element {
 
         {step === 3 && (
           <>
-            <h2 className={styles.panelTitle}>3. Kiểm tra lại đơn hàng</h2>
+            <h2 className={styles.panelTitle}>3. Phương thức thanh toán</h2>
+            <div className={styles.paymentOptions} role="radiogroup" aria-label="Phương thức thanh toán">
+              {(paymentMethods ?? []).map((method) => (
+                <label
+                  key={method.method}
+                  className={`${styles.paymentOption} ${
+                    paymentMethod === method.method ? styles.paymentOptionActive : ''
+                  } ${!method.enabled ? styles.paymentOptionDisabled : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="payment_method"
+                    value={method.method}
+                    checked={paymentMethod === method.method}
+                    disabled={!method.enabled}
+                    onChange={() => setPaymentMethod(method.method)}
+                  />
+                  <span>
+                    <strong>{method.label}</strong>
+                    <small>
+                      {method.enabled
+                        ? method.description
+                        : 'Phương thức này chưa khả dụng. Vui lòng chọn phương thức khác hoặc liên hệ hỗ trợ.'}
+                    </small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 4 && (
+          <>
+            <h2 className={styles.panelTitle}>4. Kiểm tra lại đơn hàng</h2>
 
             <section className={styles.reviewSection}>
               <div className={styles.reviewHead}>
@@ -308,6 +381,23 @@ export function CheckoutPage(): JSX.Element {
                 )}
               </dl>
             </section>
+
+            <section className={styles.reviewSection}>
+              <div className={styles.reviewHead}>
+                <h3>Thanh toán</h3>
+                <button type="button" className={styles.linkBtn} onClick={() => setStep(3)}>
+                  Sửa
+                </button>
+              </div>
+              <p className={styles.paymentReview}>
+                {selectedPayment?.label || paymentMethod}
+                {paymentMethod === 'onepay_domestic' ||
+                paymentMethod === 'onepay_international' ||
+                paymentMethod === 'onepay'
+                  ? ' — Bạn sẽ được chuyển tới trang thanh toán thẻ.'
+                  : ''}
+              </p>
+            </section>
           </>
         )}
 
@@ -335,8 +425,19 @@ export function CheckoutPage(): JSX.Element {
             </button>
           )}
           {step === 3 && (
+            <button type="button" className={styles.primaryBtn} onClick={goNextFromStep3}>
+              Tiếp tục
+            </button>
+          )}
+          {step === 4 && (
             <button type="button" className={styles.primaryBtn} disabled={pending} onClick={() => void placeOrder()}>
-              {pending ? 'Đang đặt…' : 'Xác nhận đặt hàng'}
+              {pending
+                ? 'Đang đặt…'
+                : paymentMethod === 'onepay_domestic' ||
+                    paymentMethod === 'onepay_international' ||
+                    paymentMethod === 'onepay'
+                  ? 'Đặt hàng và Thanh toán'
+                  : 'Xác nhận đặt hàng'}
             </button>
           )}
         </div>

@@ -57,6 +57,10 @@ func NewRouter(deps Dependencies) http.Handler {
 		api.Post("/auth/user/login", deps.Identity.UserLogin)
 
 		api.Post("/webhooks/delivery", deps.Ordering.DeliveryWebhook)
+		api.Get("/payments/methods", deps.Ordering.GetPaymentMethods)
+		api.Get("/payments/onepay/return", deps.Ordering.OnePayReturn)
+		api.Get("/payments/onepay/ipn", deps.Ordering.OnePayIPN)
+		api.Post("/payments/onepay/ipn", deps.Ordering.OnePayIPN)
 
 		api.Group(func(user chi.Router) {
 			user.Use(BearerAuth(deps.Tokens))
@@ -71,6 +75,7 @@ func NewRouter(deps Dependencies) http.Handler {
 			user.Post("/orders", deps.Ordering.CreateUserOrder)
 			user.Get("/me/orders", deps.Ordering.ListUserOrders)
 			user.Get("/me/orders/{id}", deps.Ordering.GetUserOrder)
+			user.Post("/me/orders/{id}/repay", deps.Ordering.RepayUserOrder)
 		})
 
 		api.Group(func(merchant chi.Router) {
@@ -124,6 +129,10 @@ func NewRouter(deps Dependencies) http.Handler {
 			admin.Get("/orders", deps.Ordering.ListOrders)
 			admin.Get("/orders/{id}", deps.Ordering.GetOrder)
 			admin.Post("/orders/{id}/delivery-simulate", deps.Ordering.SimulateDelivery)
+			admin.Get("/payment-settings", deps.Ordering.GetPaymentSettings)
+			admin.Put("/payment-settings", deps.Ordering.UpdatePaymentSettings)
+			admin.Get("/payment-callbacks", deps.Ordering.ListPaymentCallbacks)
+			admin.Get("/payment-callbacks/{id}", deps.Ordering.GetPaymentCallback)
 		})
 	})
 

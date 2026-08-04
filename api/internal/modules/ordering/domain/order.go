@@ -28,6 +28,7 @@ var (
 	ErrInvalidDeliveryStatus     = errors.New("invalid delivery status")
 	ErrDeliveryLookupRequired    = errors.New("order_code or delivery_tracking_code is required")
 	ErrDeliveryEventDuplicate    = errors.New("delivery event already processed")
+	ErrOrderNotRepayable         = errors.New("order is not eligible for repayment")
 )
 
 // Order tracking code: 10 uppercase alphanumeric characters (A-Z, 0-9).
@@ -39,15 +40,16 @@ var orderCodeAlphabet = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 type OrderStatus string
 
 const (
-	StatusNew       OrderStatus = "new"       // Mới
-	StatusPaid      OrderStatus = "paid"      // Đã thanh toán (compat)
-	StatusConfirmed OrderStatus = "confirmed" // Đã xác nhận
-	StatusShipping  OrderStatus = "shipping"  // Đang vận chuyển
-	StatusSucceeded OrderStatus = "succeeded" // Thành công
-	StatusReturning OrderStatus = "returning" // Đang hoàn hàng
-	StatusReturned  OrderStatus = "returned"  // Đã hoàn hàng
-	StatusFailed    OrderStatus = "failed"    // Thất bại
-	StatusCancelled OrderStatus = "cancelled" // Huỷ
+	StatusAwaitingPayment OrderStatus = "awaiting_payment" // Chờ thanh toán
+	StatusNew             OrderStatus = "new"              // Mới
+	StatusPaid            OrderStatus = "paid"             // Đã thanh toán (compat)
+	StatusConfirmed       OrderStatus = "confirmed"        // Đã xác nhận
+	StatusShipping        OrderStatus = "shipping"         // Đang vận chuyển
+	StatusSucceeded       OrderStatus = "succeeded"        // Thành công
+	StatusReturning       OrderStatus = "returning"        // Đang hoàn hàng
+	StatusReturned        OrderStatus = "returned"         // Đã hoàn hàng
+	StatusFailed          OrderStatus = "failed"           // Thất bại
+	StatusCancelled       OrderStatus = "cancelled"        // Huỷ
 )
 
 const DefaultDeliveryCarrier = "internal"
@@ -55,7 +57,7 @@ const DefaultDeliveryCarrier = "internal"
 func ParseOrderStatus(raw string) (OrderStatus, error) {
 	s := OrderStatus(strings.ToLower(strings.TrimSpace(raw)))
 	switch s {
-	case StatusNew, StatusPaid, StatusConfirmed, StatusShipping, StatusSucceeded,
+	case StatusAwaitingPayment, StatusNew, StatusPaid, StatusConfirmed, StatusShipping, StatusSucceeded,
 		StatusReturning, StatusReturned, StatusFailed, StatusCancelled:
 		return s, nil
 	default:
@@ -65,6 +67,8 @@ func ParseOrderStatus(raw string) (OrderStatus, error) {
 
 func (s OrderStatus) LabelVI() string {
 	switch s {
+	case StatusAwaitingPayment:
+		return "Chờ thanh toán"
 	case StatusNew:
 		return "Mới"
 	case StatusPaid:
@@ -221,6 +225,10 @@ type Order struct {
 	ShippingName         string
 	ShippingPhone        string
 	ShippingAddress      string
+	PaymentMethod        PaymentMethod
+	PaymentStatus        PaymentStatus
+	PaymentID            PaymentID
+	PaidAt               *time.Time
 	Items                []OrderItem
 	History              []OrderEvent
 	DeliveryEvents       []DeliveryEvent
@@ -321,12 +329,16 @@ func (o *Order) RecordCreated(actor Actor) {
 	if o.CreatedAt.IsZero() {
 		o.CreatedAt = now
 	}
+	msg := "Tạo đơn hàng"
+	if o.Status == StatusAwaitingPayment {
+		msg = "Tạo đơn hàng — chờ thanh toán"
+	}
 	ev := OrderEvent{
 		ID:         NewOrderEventID(),
 		OrderID:    o.ID,
 		Type:       EventCreated,
-		ToStatus:   StatusNew,
-		Message:    "Tạo đơn hàng",
+		ToStatus:   o.Status,
+		Message:    msg,
 		ActorID:    strings.TrimSpace(actor.ID),
 		ActorEmail: strings.TrimSpace(actor.Email),
 		ActorRole:  strings.TrimSpace(actor.Role),
@@ -432,7 +444,7 @@ func NewDeliveryTrackingCode() (string, error) {
 	return "DELI-" + code, nil
 }
 
-// MerchantCancel allows new|confirmed → cancelled; reason is required.
+// MerchantCancel allows awaiting_payment|new|confirmed → cancelled; reason is required.
 // After auto-dispatch, confirmed orders are usually already shipping — cancel only pre-ship.
 func (o *Order) MerchantCancel(actor Actor, reason string) error {
 	reason = strings.TrimSpace(reason)
@@ -440,7 +452,7 @@ func (o *Order) MerchantCancel(actor Actor, reason string) error {
 		return ErrMerchantCancelReasonRequired
 	}
 	switch o.Status {
-	case StatusNew, StatusConfirmed:
+	case StatusAwaitingPayment, StatusNew, StatusConfirmed:
 		// ok
 	default:
 		return ErrMerchantConfirmOnly
@@ -533,6 +545,9 @@ func (o *Order) ApplyDeliveryEvent(in ApplyDeliveryInput) (DeliveryEvent, error)
 		if err := o.ChangeStatus(target, actor); err != nil {
 			return DeliveryEvent{}, err
 		}
+		if target == StatusSucceeded && o.PaymentMethod == PaymentMethodCOD && o.PaymentStatus != PaymentStatusPaid {
+			o.MarkPaymentPaid()
+		}
 	}
 	return ev, nil
 }
@@ -562,7 +577,7 @@ func ParseOrderCode(raw string) (string, error) {
 	return code, nil
 }
 
-func NewOrder(userID, merchantID, currency, note, shippingName, shippingPhone, shippingAddress string, lines []OrderLineInput) (Order, error) {
+func NewOrder(userID, merchantID, currency, note, shippingName, shippingPhone, shippingAddress string, method PaymentMethod, lines []OrderLineInput) (Order, error) {
 	userID = strings.TrimSpace(userID)
 	merchantID = strings.TrimSpace(merchantID)
 	if userID == "" {
@@ -579,6 +594,12 @@ func NewOrder(userID, merchantID, currency, note, shippingName, shippingPhone, s
 	shippingAddress = strings.TrimSpace(shippingAddress)
 	if shippingName == "" || shippingPhone == "" || shippingAddress == "" {
 		return Order{}, ErrMissingShippingInfo
+	}
+	if method == "" {
+		method = PaymentMethodCOD
+	}
+	if _, err := ParsePaymentMethod(string(method)); err != nil {
+		return Order{}, err
 	}
 
 	currency = strings.ToUpper(strings.TrimSpace(currency))
@@ -621,23 +642,120 @@ func NewOrder(userID, merchantID, currency, note, shippingName, shippingPhone, s
 		total += lineTotal
 	}
 
-		return Order{
-			ID:              NewOrderID(),
-			Code:            code,
-			UserID:          userID,
-			MerchantID:      merchantID,
-			Status:          StatusNew,
-			Currency:        currency,
-			TotalCents:      total,
-			Note:            strings.TrimSpace(note),
-			DeliveryCarrier: DefaultDeliveryCarrier,
-			ShippingName:    shippingName,
-			ShippingPhone:   shippingPhone,
-			ShippingAddress: shippingAddress,
-			Items:           items,
-			CreatedAt:       now,
-			UpdatedAt:       now,
-		}, nil
+	payStatus := PaymentStatusUnpaid
+	status := StatusNew
+	if method.IsOnePay() {
+		payStatus = PaymentStatusPending
+		status = StatusAwaitingPayment
+	}
+
+	return Order{
+		ID:              NewOrderID(),
+		Code:            code,
+		UserID:          userID,
+		MerchantID:      merchantID,
+		Status:          status,
+		Currency:        currency,
+		TotalCents:      total,
+		Note:            strings.TrimSpace(note),
+		DeliveryCarrier: DefaultDeliveryCarrier,
+		ShippingName:    shippingName,
+		ShippingPhone:   shippingPhone,
+		ShippingAddress: shippingAddress,
+		PaymentMethod:   method,
+		PaymentStatus:   payStatus,
+		Items:           items,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}, nil
+}
+
+func (o *Order) AttachPayment(paymentID PaymentID, status PaymentStatus) {
+	o.PaymentID = paymentID
+	o.PaymentStatus = status
+	o.UpdatedAt = time.Now().UTC()
+}
+
+func (o *Order) MarkPaymentPaid() {
+	o.PaymentStatus = PaymentStatusPaid
+	now := time.Now().UTC()
+	o.PaidAt = &now
+	o.UpdatedAt = now
+}
+
+func (o *Order) MarkPaymentFailed() {
+	o.PaymentStatus = PaymentStatusFailed
+	o.UpdatedAt = time.Now().UTC()
+}
+
+// CanRepay reports whether the buyer can start another OnePay attempt.
+func (o *Order) CanRepay() bool {
+	if !o.PaymentMethod.IsOnePay() {
+		return false
+	}
+	switch o.Status {
+	case StatusAwaitingPayment:
+		return o.PaymentStatus == PaymentStatusPending || o.PaymentStatus == PaymentStatusFailed
+	case StatusCancelled:
+		return o.PaymentStatus == PaymentStatusFailed || o.PaymentStatus == PaymentStatusPending
+	default:
+		return false
+	}
+}
+
+// ApplyPaymentSuccess marks payment paid and moves awaiting/cancelled → new.
+func (o *Order) ApplyPaymentSuccess(actor Actor) error {
+	o.MarkPaymentPaid()
+	switch o.Status {
+	case StatusAwaitingPayment, StatusCancelled:
+		return o.ChangeStatus(StatusNew, actor)
+	default:
+		return nil
+	}
+}
+
+// ApplyPaymentFailure marks payment failed and cancels awaiting/new orders.
+func (o *Order) ApplyPaymentFailure(actor Actor) error {
+	o.MarkPaymentFailed()
+	switch o.Status {
+	case StatusAwaitingPayment, StatusNew:
+		if err := o.ChangeStatus(StatusCancelled, actor); err != nil {
+			return err
+		}
+		msg := "Huỷ đơn hàng do thanh toán thất bại"
+		if n := len(o.pendingEvents); n > 0 {
+			o.pendingEvents[n-1].Message = msg
+		}
+		if n := len(o.History); n > 0 {
+			o.History[n-1].Message = msg
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+// PrepareRepayment reopens a cancelled order to awaiting_payment for a new attempt.
+func (o *Order) PrepareRepayment(actor Actor) error {
+	if !o.CanRepay() {
+		return ErrOrderNotRepayable
+	}
+	if o.Status == StatusCancelled {
+		if err := o.ChangeStatus(StatusAwaitingPayment, actor); err != nil {
+			return err
+		}
+		msg := "Thanh toán lại"
+		if n := len(o.pendingEvents); n > 0 {
+			o.pendingEvents[n-1].Message = msg
+		}
+		if n := len(o.History); n > 0 {
+			o.History[n-1].Message = msg
+		}
+	}
+	o.PaymentStatus = PaymentStatusPending
+	o.PaidAt = nil
+	o.UpdatedAt = time.Now().UTC()
+	return nil
 }
 
 type OrderRepository interface {
@@ -655,7 +773,7 @@ type OrderRepository interface {
 // AllOrderStatuses returns statuses in display order.
 func AllOrderStatuses() []OrderStatus {
 	return []OrderStatus{
-		StatusNew, StatusPaid, StatusConfirmed, StatusShipping,
+		StatusAwaitingPayment, StatusNew, StatusPaid, StatusConfirmed, StatusShipping,
 		StatusSucceeded, StatusReturning, StatusReturned, StatusFailed, StatusCancelled,
 	}
 }
