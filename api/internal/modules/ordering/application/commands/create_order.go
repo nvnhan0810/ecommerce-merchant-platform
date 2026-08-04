@@ -16,10 +16,13 @@ type CreateOrderItemInput struct {
 }
 
 type CreateOrderCommand struct {
-	UserID string
-	Note   string
-	Items  []CreateOrderItemInput
-	Actor  domain.Actor
+	UserID          string
+	Note            string
+	ShippingName    string
+	ShippingPhone   string
+	ShippingAddress string
+	Items           []CreateOrderItemInput
+	Actor           domain.Actor
 }
 
 type CreateOrderHandler struct {
@@ -97,7 +100,7 @@ func (h *CreateOrderHandler) Handle(ctx context.Context, cmd CreateOrderCommand)
 	}
 
 	for merchantID, lines := range byMerchant {
-		order, err := domain.NewOrder(userID, merchantID, merchantCurrency[merchantID], cmd.Note, lines)
+		order, err := domain.NewOrder(userID, merchantID, merchantCurrency[merchantID], cmd.Note, cmd.ShippingName, cmd.ShippingPhone, cmd.ShippingAddress, lines)
 		if err != nil {
 			return nil, err
 		}

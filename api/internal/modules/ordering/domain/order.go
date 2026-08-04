@@ -20,6 +20,7 @@ var (
 	ErrMerchantConfirmOnly         = errors.New("merchant may only confirm or cancel new/confirmed orders")
 	ErrMerchantCancelReasonRequired = errors.New("cancel reason is required")
 	ErrEmptyOrderItems             = errors.New("order must have at least one item")
+	ErrMissingShippingInfo         = errors.New("shipping name, phone, and address are required")
 	ErrInvalidOrderQuantity      = errors.New("order item quantity must be greater than zero")
 	ErrInvalidOrderPrice         = errors.New("order item price must be greater than zero")
 	ErrProductMerchantMismatch   = errors.New("product does not belong to the order merchant")
@@ -217,6 +218,9 @@ type Order struct {
 	Note                 string
 	DeliveryTrackingCode string
 	DeliveryCarrier      string
+	ShippingName         string
+	ShippingPhone        string
+	ShippingAddress      string
 	Items                []OrderItem
 	History              []OrderEvent
 	DeliveryEvents       []DeliveryEvent
@@ -558,7 +562,7 @@ func ParseOrderCode(raw string) (string, error) {
 	return code, nil
 }
 
-func NewOrder(userID, merchantID, currency, note string, lines []OrderLineInput) (Order, error) {
+func NewOrder(userID, merchantID, currency, note, shippingName, shippingPhone, shippingAddress string, lines []OrderLineInput) (Order, error) {
 	userID = strings.TrimSpace(userID)
 	merchantID = strings.TrimSpace(merchantID)
 	if userID == "" {
@@ -569,6 +573,12 @@ func NewOrder(userID, merchantID, currency, note string, lines []OrderLineInput)
 	}
 	if len(lines) == 0 {
 		return Order{}, ErrEmptyOrderItems
+	}
+	shippingName = strings.TrimSpace(shippingName)
+	shippingPhone = strings.TrimSpace(shippingPhone)
+	shippingAddress = strings.TrimSpace(shippingAddress)
+	if shippingName == "" || shippingPhone == "" || shippingAddress == "" {
+		return Order{}, ErrMissingShippingInfo
 	}
 
 	currency = strings.ToUpper(strings.TrimSpace(currency))
@@ -611,20 +621,23 @@ func NewOrder(userID, merchantID, currency, note string, lines []OrderLineInput)
 		total += lineTotal
 	}
 
-	return Order{
-		ID:              NewOrderID(),
-		Code:            code,
-		UserID:          userID,
-		MerchantID:      merchantID,
-		Status:          StatusNew,
-		Currency:        currency,
-		TotalCents:      total,
-		Note:            strings.TrimSpace(note),
-		DeliveryCarrier: DefaultDeliveryCarrier,
-		Items:           items,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}, nil
+		return Order{
+			ID:              NewOrderID(),
+			Code:            code,
+			UserID:          userID,
+			MerchantID:      merchantID,
+			Status:          StatusNew,
+			Currency:        currency,
+			TotalCents:      total,
+			Note:            strings.TrimSpace(note),
+			DeliveryCarrier: DefaultDeliveryCarrier,
+			ShippingName:    shippingName,
+			ShippingPhone:   shippingPhone,
+			ShippingAddress: shippingAddress,
+			Items:           items,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}, nil
 }
 
 type OrderRepository interface {

@@ -9,6 +9,7 @@ import { OrderDetailPage } from './app/OrderDetailPage'
 import { OrdersPage } from './app/OrdersPage'
 import { ProductDetailPage } from './app/ProductDetailPage'
 import { ProfilePage } from './app/ProfilePage'
+import { AddressesPage } from './app/AddressesPage'
 
 export default function App(): JSX.Element {
   return (
@@ -21,6 +22,7 @@ export default function App(): JSX.Element {
         <Route path="orders" element={<OrdersPage />} />
         <Route path="orders/:id" element={<OrderDetailPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="addresses" element={<AddressesPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

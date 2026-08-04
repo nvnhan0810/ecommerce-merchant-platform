@@ -46,6 +46,10 @@ func NewRouter(deps Dependencies) http.Handler {
 		api.Get("/products/{id}", deps.Catalog.GetProduct)
 		api.Get("/media/*", deps.Catalog.ServeMedia)
 
+		api.Get("/countries", deps.Identity.ListCountries)
+		api.Get("/provinces", deps.Identity.ListProvinces)
+		api.Get("/wards", deps.Identity.ListWards)
+
 		api.Post("/auth/login", deps.Identity.Login)
 		api.Post("/auth/merchant/login", deps.Identity.MerchantLogin)
 		api.Post("/auth/user/login", deps.Identity.UserLogin)
@@ -57,6 +61,11 @@ func NewRouter(deps Dependencies) http.Handler {
 			user.Use(RequireUser)
 			user.Get("/auth/user/me", deps.Identity.UserMe)
 			user.Put("/auth/user/me", deps.Identity.UpdateProfile)
+			user.Get("/me/addresses", deps.Identity.ListUserAddresses)
+			user.Post("/me/addresses", deps.Identity.CreateUserAddress)
+			user.Get("/me/addresses/{id}", deps.Identity.GetUserAddress)
+			user.Put("/me/addresses/{id}", deps.Identity.UpdateUserAddress)
+			user.Delete("/me/addresses/{id}", deps.Identity.DeleteUserAddress)
 			user.Post("/orders", deps.Ordering.CreateUserOrder)
 			user.Get("/me/orders", deps.Ordering.ListUserOrders)
 			user.Get("/me/orders/{id}", deps.Ordering.GetUserOrder)

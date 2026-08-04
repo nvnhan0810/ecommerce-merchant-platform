@@ -44,6 +44,9 @@ export class Order {
     readonly note: string,
     readonly deliveryTrackingCode: string,
     readonly deliveryCarrier: string,
+    readonly shippingName: string,
+    readonly shippingPhone: string,
+    readonly shippingAddress: string,
     readonly items: OrderItem[],
     readonly deliveryEvents: DeliveryEvent[],
     readonly createdAt: string,
@@ -59,5 +62,5 @@ export type CreateOrderItemInput = {
 export interface OrderRepository {
   list(): Promise<Order[]>
   getById(id: string): Promise<Order>
-  create(note: string, items: CreateOrderItemInput[]): Promise<Order[]>
+  create(note: string, items: CreateOrderItemInput[], shippingName: string, shippingPhone: string, shippingAddress: string): Promise<Order[]>
 }

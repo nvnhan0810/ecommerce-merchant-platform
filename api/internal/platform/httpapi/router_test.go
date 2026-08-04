@@ -34,6 +34,8 @@ func newTestServer(t *testing.T) http.Handler {
 	productRepo := cataloginfra.NewInMemoryProductRepository()
 	orderRepo := orderinginfra.NewInMemoryOrderRepository()
 	users := identityinfra.NewInMemoryAccountRepository()
+	addresses := identityinfra.NewInMemoryAddressRepository()
+	geo := identityinfra.NewInMemoryGeoRepository()
 	merchants := identityinfra.NewInMemoryAccountRepository()
 	admins := identityinfra.NewInMemoryAccountRepository()
 	hasher := identityinfra.NewBcryptPasswordHasher()
@@ -82,6 +84,14 @@ func newTestServer(t *testing.T) http.Handler {
 			identitycommands.NewCreateMerchantHandler(merchants, hasher),
 			identitycommands.NewUpdateMerchantHandler(merchants, hasher),
 			identitycommands.NewDeleteMerchantHandler(merchants),
+			identityqueries.NewListUserAddressesHandler(addresses),
+			identityqueries.NewGetUserAddressHandler(addresses),
+			identitycommands.NewCreateUserAddressHandler(addresses, geo),
+			identitycommands.NewUpdateUserAddressHandler(addresses, geo),
+			identitycommands.NewDeleteUserAddressHandler(addresses),
+			identityqueries.NewListCountriesHandler(geo),
+			identityqueries.NewListProvincesHandler(geo),
+			identityqueries.NewListWardsHandler(geo),
 		),
 		Ordering: orderingpres.NewOrderingHandler(
 			orderingqueries.NewListOrdersHandler(orderRepo),
@@ -763,7 +773,7 @@ func TestMerchantOrders_should_list_get_and_update_own_only(t *testing.T) {
 	if productID == "" {
 		t.Fatal("expected product for merchant")
 	}
-	createBody := bytes.NewBufferString(`{"note":"cancel-me","items":[{"product_id":"` + productID + `","quantity":1}]}`)
+	createBody := bytes.NewBufferString(`{"note":"cancel-me","shipping_name":"Nguyen Van A","shipping_phone":"0901234567","shipping_address":"12 Nguyen Hue, Q1, HCM","items":[{"product_id":"` + productID + `","quantity":1}]}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/orders", createBody)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.Header.Set("Authorization", "Bearer "+uTok)
@@ -886,7 +896,7 @@ func TestUserStorefront_login_create_order_and_list(t *testing.T) {
 		t.Fatalf("me status=%d body=%s", meRec.Code, meRec.Body.String())
 	}
 
-	createBody := bytes.NewBufferString(`{"note":"web checkout","items":[{"product_id":"` + productID + `","quantity":1}]}`)
+	createBody := bytes.NewBufferString(`{"note":"web checkout","shipping_name":"Nguyen Van A","shipping_phone":"0901234567","shipping_address":"12 Nguyen Hue, Q1, HCM","items":[{"product_id":"` + productID + `","quantity":1}]}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/orders", createBody)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.Header.Set("Authorization", "Bearer "+token)

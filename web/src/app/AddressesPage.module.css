@@ -1,0 +1,6 @@
+.page {
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}

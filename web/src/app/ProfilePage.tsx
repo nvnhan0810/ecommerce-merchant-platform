@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@/modules/auth/presentation/AuthProvider'
 import styles from './ProfilePage.module.css'
 
@@ -75,6 +75,9 @@ export function ProfilePage(): JSX.Element {
           {pending ? 'Đang lưu…' : 'Lưu thay đổi'}
         </button>
       </form>
+      <p className={styles.addressLink}>
+        <Link to="/addresses">Quản lý địa chỉ giao hàng →</Link>
+      </p>
     </section>
   )
 }

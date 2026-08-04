@@ -62,14 +62,6 @@ export function OrderDetailPage(): JSX.Element {
 
           <div className={styles.infoGrid}>
             <div className={styles.infoItem}>
-              <span className={styles.infoLabel}>Mã vận đơn</span>
-              <strong className={styles.codeInline}>{data.deliveryTrackingCode || '—'}</strong>
-            </div>
-            <div className={styles.infoItem}>
-              <span className={styles.infoLabel}>Đơn vị vận chuyển</span>
-              <span>{data.deliveryCarrier || 'internal'}</span>
-            </div>
-            <div className={styles.infoItem}>
               <span className={styles.infoLabel}>Tổng tiền</span>
               <strong className={styles.totalPrice}>{formatMoney(data.totalCents, data.currency)}</strong>
             </div>
@@ -81,6 +73,26 @@ export function OrderDetailPage(): JSX.Element {
               <span className={styles.infoLabel}>Ghi chú</span>
               <span>{data.note || '—'}</span>
             </div>
+          </div>
+
+          <div className={styles.addressBox}>
+            <h3 className={styles.sectionTitle}>Thông tin giao hàng</h3>
+            <dl className={styles.shippingDl}>
+              <div className={styles.shippingRow}>
+                <div>
+                  <dt>Người nhận</dt>
+                  <dd>{data.shippingName || '—'}</dd>
+                </div>
+                <div>
+                  <dt>Số điện thoại</dt>
+                  <dd>{data.shippingPhone || '—'}</dd>
+                </div>
+              </div>
+              <div>
+                <dt>Địa chỉ</dt>
+                <dd>{data.shippingAddress || '—'}</dd>
+              </div>
+            </dl>
           </div>
 
           <div className={styles.tabs}>
@@ -117,7 +129,9 @@ export function OrderDetailPage(): JSX.Element {
                       <tr key={item.id}>
                         <td>{item.productName}</td>
                         <td className={styles.textCenter}>{item.quantity}</td>
-                        <td className={styles.textRight}>{formatMoney(item.lineTotalCents, data.currency)}</td>
+                        <td className={styles.textRight}>
+                          {formatMoney(item.lineTotalCents, data.currency)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -128,24 +142,39 @@ export function OrderDetailPage(): JSX.Element {
 
           {activeTab === 'tracking' && (
             <div className={styles.tabContent}>
-              {data.deliveryEvents.length === 0 ? (
-                <div className={styles.emptyState}>
+              <section className={styles.carrierSection}>
+                <h2 className={styles.sectionTitle}>Thông tin vận chuyển</h2>
+                <dl className={styles.shippingDl}>
+                  <div>
+                    <dt>Mã vận đơn</dt>
+                    <dd className={styles.codeInline}>{data.deliveryTrackingCode || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Đơn vị vận chuyển</dt>
+                    <dd>{data.deliveryCarrier || 'internal'}</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section>
+                <h2 className={styles.sectionTitle}>Lịch trình</h2>
+                {data.deliveryEvents.length === 0 ? (
                   <p className={styles.muted}>Chưa có sự kiện vận chuyển nào.</p>
-                </div>
-              ) : (
-                <ol className={styles.timeline}>
-                  {data.deliveryEvents.map((ev) => (
-                    <li key={ev.id}>
-                      <div className={styles.timelineHeader}>
-                        <strong>{ev.statusLabel || ev.statusCode}</strong>
-                        <span className={styles.muted}>{formatDate(ev.occurredAt)}</span>
-                      </div>
-                      <p className={styles.timelineMessage}>{ev.message}</p>
-                      {ev.reason ? <p className={styles.timelineReason}>Lý do: {ev.reason}</p> : null}
-                    </li>
-                  ))}
-                </ol>
-              )}
+                ) : (
+                  <ol className={styles.timeline}>
+                    {data.deliveryEvents.map((ev) => (
+                      <li key={ev.id}>
+                        <div className={styles.timelineHeader}>
+                          <strong>{ev.statusLabel || ev.statusCode}</strong>
+                          <span className={styles.muted}>{formatDate(ev.occurredAt)}</span>
+                        </div>
+                        <p className={styles.timelineMessage}>{ev.message}</p>
+                        {ev.reason ? <p className={styles.timelineReason}>Lý do: {ev.reason}</p> : null}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
             </div>
           )}
         </article>

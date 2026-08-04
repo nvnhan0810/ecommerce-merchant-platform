@@ -61,6 +61,9 @@ type OrderDTO struct {
 	Note                 string             `json:"note"`
 	DeliveryTrackingCode string             `json:"deliveryTrackingCode,omitempty"`
 	DeliveryCarrier      string             `json:"deliveryCarrier"`
+	ShippingName         string             `json:"shipping_name"`
+	ShippingPhone        string             `json:"shipping_phone"`
+	ShippingAddress      string             `json:"shipping_address"`
 	Items                []OrderItemDTO     `json:"items"`
 	History              []OrderEventDTO    `json:"history"`
 	DeliveryEvents       []DeliveryEventDTO `json:"delivery_events"`
@@ -114,6 +117,9 @@ func ToDTOWithHistory(o domain.Order, includeHistory bool) OrderDTO {
 		Note:                 o.Note,
 		DeliveryTrackingCode: o.DeliveryTrackingCode,
 		DeliveryCarrier:      carrier,
+		ShippingName:         o.ShippingName,
+		ShippingPhone:        o.ShippingPhone,
+		ShippingAddress:      o.ShippingAddress,
 		Items:                items,
 		History:              history,
 		DeliveryEvents:       deliveryEvents,
