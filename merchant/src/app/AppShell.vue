@@ -21,6 +21,7 @@ function logout(): void {
       <nav aria-label="Merchant">
         <RouterLink to="/">Dashboard</RouterLink>
         <RouterLink to="/products">Sản phẩm</RouterLink>
+        <RouterLink to="/orders">Đơn hàng</RouterLink>
       </nav>
       <div class="footer">
         <p v-if="session" class="user">{{ session.displayName }}</p>

@@ -589,3 +589,125 @@ func TestMerchantProductCRUD_should_scope_and_block_delete_with_orders(t *testin
 		t.Fatalf("delete status=%d body=%s", delRec.Code, delRec.Body.String())
 	}
 }
+
+func TestMerchantOrders_should_list_get_and_update_own_only(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+
+	unauth := httptest.NewRequest(http.MethodGet, "/api/v1/merchant/orders", nil)
+	unauthRec := httptest.NewRecorder()
+	srv.ServeHTTP(unauthRec, unauth)
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", unauthRec.Code)
+	}
+
+	adminTok := adminToken(t, srv)
+	forbid := httptest.NewRequest(http.MethodGet, "/api/v1/merchant/orders", nil)
+	forbid.Header.Set("Authorization", "Bearer "+adminTok)
+	forbidRec := httptest.NewRecorder()
+	srv.ServeHTTP(forbidRec, forbid)
+	if forbidRec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for admin, got %d", forbidRec.Code)
+	}
+
+	token := merchantToken(t, srv)
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/merchant/orders?limit=50", nil)
+	listReq.Header.Set("Authorization", "Bearer "+token)
+	listRec := httptest.NewRecorder()
+	srv.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listRec.Code, listRec.Body.String())
+	}
+	var listPayload struct {
+		Data []struct {
+			ID         string `json:"id"`
+			Code       string `json:"code"`
+			MerchantID string `json:"merchant_id"`
+			Status     string `json:"status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listPayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(listPayload.Data) == 0 {
+		t.Fatal("expected merchant orders")
+	}
+	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/merchant/me", nil)
+	meReq.Header.Set("Authorization", "Bearer "+token)
+	meRec := httptest.NewRecorder()
+	srv.ServeHTTP(meRec, meReq)
+	var me struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(meRec.Body.Bytes(), &me); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range listPayload.Data {
+		if o.MerchantID != me.Data.ID {
+			t.Fatalf("order %s merchant=%s want %s", o.ID, o.MerchantID, me.Data.ID)
+		}
+	}
+
+	first := listPayload.Data[0]
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/merchant/orders/"+first.ID, nil)
+	getReq.Header.Set("Authorization", "Bearer "+token)
+	getRec := httptest.NewRecorder()
+	srv.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get status=%d body=%s", getRec.Code, getRec.Body.String())
+	}
+
+	adminOrders := httptest.NewRequest(http.MethodGet, "/api/v1/orders?limit=50", nil)
+	adminOrders.Header.Set("Authorization", "Bearer "+adminTok)
+	adminOrdersRec := httptest.NewRecorder()
+	srv.ServeHTTP(adminOrdersRec, adminOrders)
+	var allOrders struct {
+		Data []struct {
+			ID         string `json:"id"`
+			MerchantID string `json:"merchant_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(adminOrdersRec.Body.Bytes(), &allOrders); err != nil {
+		t.Fatal(err)
+	}
+	foreignID := ""
+	for _, o := range allOrders.Data {
+		if o.MerchantID != me.Data.ID {
+			foreignID = o.ID
+			break
+		}
+	}
+	if foreignID == "" {
+		t.Fatal("expected another merchant order in seed")
+	}
+	foreignGet := httptest.NewRequest(http.MethodGet, "/api/v1/merchant/orders/"+foreignID, nil)
+	foreignGet.Header.Set("Authorization", "Bearer "+token)
+	foreignGetRec := httptest.NewRecorder()
+	srv.ServeHTTP(foreignGetRec, foreignGet)
+	if foreignGetRec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for foreign order, got %d", foreignGetRec.Code)
+	}
+
+	patchBody := bytes.NewBufferString(`{"status":"confirmed"}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/merchant/orders/"+first.ID+"/status", patchBody)
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq.Header.Set("Authorization", "Bearer "+token)
+	patchRec := httptest.NewRecorder()
+	srv.ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusOK {
+		t.Fatalf("patch status=%d body=%s", patchRec.Code, patchRec.Body.String())
+	}
+	var patched struct {
+		Data struct {
+			Status string `json:"status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(patchRec.Body.Bytes(), &patched); err != nil {
+		t.Fatal(err)
+	}
+	if patched.Data.Status != "confirmed" {
+		t.Fatalf("status=%s want confirmed", patched.Data.Status)
+	}
+}

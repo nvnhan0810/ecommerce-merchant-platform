@@ -9,9 +9,10 @@ import (
 )
 
 type UpdateOrderStatusCommand struct {
-	ID     domain.OrderID
-	Status string
-	Actor  domain.Actor
+	ID              domain.OrderID
+	Status          string
+	Actor           domain.Actor
+	OwnerMerchantID string // when set, order must belong to this merchant
 }
 
 type UpdateOrderStatusHandler struct {
@@ -26,6 +27,10 @@ func (h *UpdateOrderStatusHandler) Handle(_ context.Context, cmd UpdateOrderStat
 	order, err := h.repo.FindByID(cmd.ID)
 	if err != nil {
 		return queries.OrderDTO{}, err
+	}
+	owner := strings.TrimSpace(cmd.OwnerMerchantID)
+	if owner != "" && order.MerchantID != owner {
+		return queries.OrderDTO{}, domain.ErrOrderNotFound
 	}
 	status, err := domain.ParseOrderStatus(cmd.Status)
 	if err != nil {

@@ -59,6 +59,9 @@ func NewRouter(deps Dependencies) http.Handler {
 			merchant.Delete("/merchant/products/{id}", deps.Catalog.DeleteMerchantProduct)
 			merchant.Post("/merchant/products/{id}/image", deps.Catalog.UploadMerchantProductImage)
 			merchant.Delete("/merchant/products/{id}/image", deps.Catalog.DeleteMerchantProductImage)
+			merchant.Get("/merchant/orders", deps.Ordering.ListMerchantOrders)
+			merchant.Get("/merchant/orders/{id}", deps.Ordering.GetMerchantOrder)
+			merchant.Patch("/merchant/orders/{id}/status", deps.Ordering.UpdateMerchantOrderStatus)
 		})
 
 		api.Group(func(admin chi.Router) {
