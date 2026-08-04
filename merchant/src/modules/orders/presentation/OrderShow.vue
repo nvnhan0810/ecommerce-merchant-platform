@@ -654,4 +654,11 @@ button:disabled {
   background: #fff;
   color: #334155;
 }
+
+.items h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  color: #0f172a;
+}
 </style>
