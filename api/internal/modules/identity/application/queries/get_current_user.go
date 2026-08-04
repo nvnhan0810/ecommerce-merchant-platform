@@ -11,12 +11,23 @@ type GetCurrentUserQuery struct {
 }
 
 type GetCurrentUserHandler struct {
-	accounts domain.AccountRepository
-	role     domain.Role
+	accounts   domain.AccountRepository
+	role       domain.Role
+	publicBase string
+	geo        domain.GeoRepository
 }
 
 func NewGetCurrentUserHandler(accounts domain.AccountRepository, role domain.Role) *GetCurrentUserHandler {
 	return &GetCurrentUserHandler{accounts: accounts, role: role}
+}
+
+func NewGetCurrentMerchantHandler(accounts domain.AccountRepository, publicBase string, geo domain.GeoRepository) *GetCurrentUserHandler {
+	return &GetCurrentUserHandler{
+		accounts:   accounts,
+		role:       domain.RoleMerchant,
+		publicBase: publicBase,
+		geo:        geo,
+	}
 }
 
 func (h *GetCurrentUserHandler) Handle(_ context.Context, q GetCurrentUserQuery) (AccountDTO, error) {
@@ -24,10 +35,5 @@ func (h *GetCurrentUserHandler) Handle(_ context.Context, q GetCurrentUserQuery)
 	if err != nil {
 		return AccountDTO{}, err
 	}
-	return AccountDTO{
-		ID:          string(account.ID),
-		Email:       account.Email,
-		DisplayName: account.DisplayName,
-		Role:        string(h.role),
-	}, nil
+	return ToAccountDTO(account, h.role, h.publicBase, h.geo), nil
 }

@@ -10,7 +10,7 @@ import (
 func TestCreateMerchantHandler_should_create_merchant(t *testing.T) {
 	t.Parallel()
 	repo := infrastructureMem()
-	h := NewCreateMerchantHandler(repo, stubHasher{})
+	h := NewCreateMerchantHandler(repo, stubHasher{}, nil, "")
 	res, err := h.Handle(context.Background(), CreateMerchantCommand{
 		Email:       "newshop@ecomerce.local",
 		DisplayName: "New Shop",
@@ -27,7 +27,7 @@ func TestCreateMerchantHandler_should_create_merchant(t *testing.T) {
 func TestCreateMerchantHandler_should_reject_duplicate_email(t *testing.T) {
 	t.Parallel()
 	repo := infrastructureMem()
-	h := NewCreateMerchantHandler(repo, stubHasher{})
+	h := NewCreateMerchantHandler(repo, stubHasher{}, nil, "")
 	_, _ = h.Handle(context.Background(), CreateMerchantCommand{
 		Email: "dup@ecomerce.local", DisplayName: "A", Password: "Shop@123456",
 	})
@@ -43,7 +43,7 @@ func TestUpdateAndDeleteMerchant(t *testing.T) {
 	t.Parallel()
 	repo := infrastructureMem()
 	hasher := stubHasher{}
-	create := NewCreateMerchantHandler(repo, hasher)
+	create := NewCreateMerchantHandler(repo, hasher, nil, "")
 	created, err := create.Handle(context.Background(), CreateMerchantCommand{
 		Email: "edit@ecomerce.local", DisplayName: "Old", Password: "Shop@123456",
 	})
@@ -52,7 +52,7 @@ func TestUpdateAndDeleteMerchant(t *testing.T) {
 	}
 	id := domain.AccountID(created.ID)
 
-	update := NewUpdateMerchantHandler(repo, hasher)
+	update := NewUpdateMerchantHandler(repo, hasher, nil, "")
 	updated, err := update.Handle(context.Background(), UpdateMerchantCommand{
 		ID: id, Email: "edited@ecomerce.local", DisplayName: "New Name",
 	})

@@ -13,6 +13,14 @@ export class ListMerchantsUseCase {
   }
 }
 
+export class GetMerchantUseCase {
+  constructor(private readonly repo: MerchantRepository) {}
+
+  execute(id: string): Promise<MerchantAccount> {
+    return this.repo.getById(id)
+  }
+}
+
 export class CreateMerchantUseCase {
   constructor(private readonly repo: MerchantRepository) {}
 
@@ -34,5 +42,21 @@ export class DeleteMerchantUseCase {
 
   execute(id: string): Promise<void> {
     return this.repo.remove(id)
+  }
+}
+
+export class UploadMerchantAvatarUseCase {
+  constructor(private readonly repo: MerchantRepository) {}
+
+  execute(id: string, file: File): Promise<MerchantAccount> {
+    return this.repo.uploadAvatar(id, file)
+  }
+}
+
+export class DeleteMerchantAvatarUseCase {
+  constructor(private readonly repo: MerchantRepository) {}
+
+  execute(id: string): Promise<MerchantAccount> {
+    return this.repo.deleteAvatar(id)
   }
 }

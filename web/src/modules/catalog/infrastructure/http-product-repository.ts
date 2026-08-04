@@ -9,6 +9,9 @@ type ProductApiItem = {
   currency: string
   stock: number
   image_url?: string
+  merchant_display_name?: string
+  merchant_avatar_url?: string
+  merchant_province_name?: string
 }
 
 function mapProduct(item: ProductApiItem): Product {
@@ -20,6 +23,9 @@ function mapProduct(item: ProductApiItem): Product {
     item.stock,
     item.merchant_id,
     item.image_url ?? '',
+    item.merchant_display_name ?? '',
+    item.merchant_avatar_url ?? '',
+    item.merchant_province_name ?? '',
   )
 }
 
@@ -28,8 +34,12 @@ function apiBaseUrl(): string {
 }
 
 export class HttpProductRepository implements ProductRepository {
-  async list(limit = 40): Promise<Product[]> {
-    const res = await fetch(`${apiBaseUrl()}/api/v1/products?limit=${limit}`)
+  async list(limit = 40, merchantId?: string): Promise<Product[]> {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (merchantId?.trim()) {
+      params.set('merchant_id', merchantId.trim())
+    }
+    const res = await fetch(`${apiBaseUrl()}/api/v1/products?${params.toString()}`)
     if (!res.ok) {
       throw new Error(`Failed to load products (${res.status})`)
     }

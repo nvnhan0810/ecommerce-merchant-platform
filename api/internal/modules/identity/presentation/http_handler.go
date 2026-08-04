@@ -1,8 +1,10 @@
 package presentation
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,6 +12,7 @@ import (
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/queries"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/authctx"
+	"github.com/nvnhan0810/ecomerce-api/internal/platform/storage"
 )
 
 type IdentityHandler struct {
@@ -29,15 +32,17 @@ type IdentityHandler struct {
 	createMerchant *commands.CreateMerchantHandler
 	updateMerchant *commands.UpdateMerchantHandler
 	deleteMerchant *commands.DeleteMerchantHandler
+	uploadAvatar   *commands.UploadMerchantAvatarHandler
+	deleteAvatar   *commands.DeleteMerchantAvatarHandler
 
-	listAddresses   *queries.ListUserAddressesHandler
-	getAddress      *queries.GetUserAddressHandler
-	createAddress   *commands.CreateUserAddressHandler
-	updateAddress   *commands.UpdateUserAddressHandler
-	deleteAddress   *commands.DeleteUserAddressHandler
-	listCountries   *queries.ListCountriesHandler
-	listProvinces   *queries.ListProvincesHandler
-	listWards       *queries.ListWardsHandler
+	listAddresses *queries.ListUserAddressesHandler
+	getAddress    *queries.GetUserAddressHandler
+	createAddress *commands.CreateUserAddressHandler
+	updateAddress *commands.UpdateUserAddressHandler
+	deleteAddress *commands.DeleteUserAddressHandler
+	listCountries *queries.ListCountriesHandler
+	listProvinces *queries.ListProvincesHandler
+	listWards     *queries.ListWardsHandler
 }
 
 func NewIdentityHandler(
@@ -57,6 +62,8 @@ func NewIdentityHandler(
 	createMerchant *commands.CreateMerchantHandler,
 	updateMerchant *commands.UpdateMerchantHandler,
 	deleteMerchant *commands.DeleteMerchantHandler,
+	uploadAvatar *commands.UploadMerchantAvatarHandler,
+	deleteAvatar *commands.DeleteMerchantAvatarHandler,
 	listAddresses *queries.ListUserAddressesHandler,
 	getAddress *queries.GetUserAddressHandler,
 	createAddress *commands.CreateUserAddressHandler,
@@ -83,6 +90,8 @@ func NewIdentityHandler(
 		createMerchant: createMerchant,
 		updateMerchant: updateMerchant,
 		deleteMerchant: deleteMerchant,
+		uploadAvatar:   uploadAvatar,
+		deleteAvatar:   deleteAvatar,
 		listAddresses:  listAddresses,
 		getAddress:     getAddress,
 		createAddress:  createAddress,
@@ -226,9 +235,22 @@ func (h *IdentityHandler) ListMerchants(w http.ResponseWriter, r *http.Request) 
 }
 
 type accountBody struct {
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	Password    string `json:"password"`
+	Email        string `json:"email"`
+	DisplayName  string `json:"display_name"`
+	Password     string `json:"password"`
+	AddressLine  string `json:"address_line"`
+	CountryCode  string `json:"country_code"`
+	ProvinceCode string `json:"province_code"`
+	WardCode     string `json:"ward_code"`
+}
+
+type merchantProfileBody struct {
+	DisplayName  string `json:"display_name"`
+	Password     string `json:"password"`
+	AddressLine  string `json:"address_line"`
+	CountryCode  string `json:"country_code"`
+	ProvinceCode string `json:"province_code"`
+	WardCode     string `json:"ward_code"`
 }
 
 func (h *IdentityHandler) CreateMerchant(w http.ResponseWriter, r *http.Request) {
@@ -238,9 +260,13 @@ func (h *IdentityHandler) CreateMerchant(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	res, err := h.createMerchant.Handle(r.Context(), commands.CreateMerchantCommand{
-		Email:       body.Email,
-		DisplayName: body.DisplayName,
-		Password:    body.Password,
+		Email:        body.Email,
+		DisplayName:  body.DisplayName,
+		Password:     body.Password,
+		AddressLine:  body.AddressLine,
+		CountryCode:  body.CountryCode,
+		ProvinceCode: body.ProvinceCode,
+		WardCode:     body.WardCode,
 	})
 	if err != nil {
 		writeIdentityError(w, err)
@@ -255,7 +281,17 @@ func (h *IdentityHandler) GetMerchant(w http.ResponseWriter, r *http.Request) {
 		writeIdentityError(w, err)
 		return
 	}
-	item, err := h.getMerchant.Handle(r.Context(), queries.GetMerchantQuery{ID: id})
+	claims, ok := authctx.FromContext(r.Context())
+	if ok && claims.Role == domain.RoleAdmin {
+		item, err := h.getMerchant.Handle(r.Context(), queries.GetMerchantQuery{ID: id})
+		if err != nil {
+			writeIdentityError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": item})
+		return
+	}
+	item, err := h.getMerchant.HandlePublic(r.Context(), queries.GetMerchantQuery{ID: id})
 	if err != nil {
 		writeIdentityError(w, err)
 		return
@@ -275,10 +311,42 @@ func (h *IdentityHandler) UpdateMerchant(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	res, err := h.updateMerchant.Handle(r.Context(), commands.UpdateMerchantCommand{
-		ID:          id,
-		Email:       body.Email,
-		DisplayName: body.DisplayName,
-		Password:    body.Password,
+		ID:           id,
+		Email:        body.Email,
+		DisplayName:  body.DisplayName,
+		Password:     body.Password,
+		AddressLine:  body.AddressLine,
+		CountryCode:  body.CountryCode,
+		ProvinceCode: body.ProvinceCode,
+		WardCode:     body.WardCode,
+	})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
+func (h *IdentityHandler) UpdateMerchantProfile(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authctx.FromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var body merchantProfileBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.updateMerchant.Handle(r.Context(), commands.UpdateMerchantCommand{
+		ID:           claims.UserID,
+		DisplayName:  body.DisplayName,
+		Password:     body.Password,
+		AddressLine:  body.AddressLine,
+		CountryCode:  body.CountryCode,
+		ProvinceCode: body.ProvinceCode,
+		WardCode:     body.WardCode,
+		KeepEmail:    true,
 	})
 	if err != nil {
 		writeIdentityError(w, err)
@@ -298,6 +366,90 @@ func (h *IdentityHandler) DeleteMerchant(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *IdentityHandler) UploadMerchantAvatar(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseAccountID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	h.uploadAvatarFor(w, r, id)
+}
+
+func (h *IdentityHandler) DeleteMerchantAvatar(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseAccountID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	res, err := h.deleteAvatar.Handle(r.Context(), commands.DeleteMerchantAvatarCommand{ID: id})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
+func (h *IdentityHandler) UploadMyMerchantAvatar(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authctx.FromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	h.uploadAvatarFor(w, r, claims.UserID)
+}
+
+func (h *IdentityHandler) DeleteMyMerchantAvatar(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authctx.FromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	res, err := h.deleteAvatar.Handle(r.Context(), commands.DeleteMerchantAvatarCommand{ID: claims.UserID})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
+func (h *IdentityHandler) uploadAvatarFor(w http.ResponseWriter, r *http.Request, id domain.AccountID) {
+	if err := r.ParseMultipartForm(6 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid multipart form")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+
+	limited := http.MaxBytesReader(w, file, 5<<20)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file too large or unreadable (max 5MB)")
+		return
+	}
+	if len(data) == 0 {
+		writeIdentityError(w, domain.ErrInvalidAvatar)
+		return
+	}
+	ct := http.DetectContentType(data)
+
+	res, err := h.uploadAvatar.Handle(r.Context(), commands.UploadMerchantAvatarCommand{
+		ID:          id,
+		Filename:    header.Filename,
+		ContentType: ct,
+		Size:        int64(len(data)),
+		Body:        bytes.NewReader(data),
+	})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
 }
 
 func (h *IdentityHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
@@ -394,10 +546,13 @@ func writeIdentityError(w http.ResponseWriter, err error) {
 		errors.Is(err, domain.ErrInvalidAccountID),
 		errors.Is(err, domain.ErrInvalidAddressID),
 		errors.Is(err, domain.ErrMissingAddressFields),
-		errors.Is(err, domain.ErrInvalidGeoRef):
+		errors.Is(err, domain.ErrInvalidGeoRef),
+		errors.Is(err, domain.ErrInvalidAvatar):
 		status = http.StatusBadRequest
 	case errors.Is(err, domain.ErrInvalidCredentials), errors.Is(err, domain.ErrPasswordNotSet):
 		status = http.StatusUnauthorized
+	case errors.Is(err, storage.ErrObjectStoreDisabled):
+		status = http.StatusServiceUnavailable
 	}
 	writeError(w, status, err.Error())
 }

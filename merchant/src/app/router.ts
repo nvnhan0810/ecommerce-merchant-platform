@@ -27,6 +27,7 @@ export const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: '', component: DashboardPanel },
+        { path: 'profile', component: () => import('@/modules/profile/presentation/MerchantProfilePage.vue') },
         { path: 'products', component: ProductList },
         { path: 'products/new', component: ProductCreate },
         { path: 'products/:id/edit', component: ProductEdit },

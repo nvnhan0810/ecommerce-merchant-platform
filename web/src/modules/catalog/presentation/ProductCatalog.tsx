@@ -7,10 +7,21 @@ import styles from './ProductCatalog.module.css'
 
 const listProducts = new ListProductsUseCase(new HttpProductRepository())
 
-export function ProductCatalog(): JSX.Element {
+type ProductCatalogProps = {
+  merchantId?: string
+  limit?: number
+  /** Hide merchant footer when already browsing a merchant shop page. */
+  hideMerchant?: boolean
+}
+
+export function ProductCatalog({
+  merchantId,
+  limit = 40,
+  hideMerchant = false,
+}: ProductCatalogProps): JSX.Element {
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['catalog', 'products'],
-    queryFn: () => listProducts.execute(40),
+    queryKey: ['catalog', 'products', merchantId ?? 'all', limit],
+    queryFn: () => listProducts.execute(limit, merchantId),
   })
 
   if (isLoading) {
@@ -51,6 +62,29 @@ export function ProductCatalog(): JSX.Element {
               </span>
             </div>
           </Link>
+          {!hideMerchant && product.merchantId ? (
+            <Link
+              to={`/merchants/${product.merchantId}`}
+              className={styles.merchant}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className={styles.merchantLeft}>
+                <span className={styles.merchantAvatar} aria-hidden="true">
+                  {product.merchantAvatarUrl ? (
+                    <img src={product.merchantAvatarUrl} alt="" />
+                  ) : (
+                    <span>{(product.merchantDisplayName || '?').charAt(0)}</span>
+                  )}
+                </span>
+                <span className={styles.merchantName}>
+                  {product.merchantDisplayName || 'Gian hàng'}
+                </span>
+              </span>
+              {product.merchantProvinceName ? (
+                <span className={styles.merchantProvince}>{product.merchantProvinceName}</span>
+              ) : null}
+            </Link>
+          ) : null}
         </li>
       ))}
     </ul>

@@ -30,9 +30,36 @@ func NewPostgresAdminRepository(pool *pgxpool.Pool) *PostgresAccountRepository {
 	return &PostgresAccountRepository{pool: pool, table: "admins"}
 }
 
+func (r *PostgresAccountRepository) isMerchant() bool {
+	return r.table == "merchants"
+}
+
 func (r *PostgresAccountRepository) Save(account domain.Account) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if r.isMerchant() {
+		q := `
+			INSERT INTO merchants (
+				id, email, display_name, password_hash, created_at,
+				avatar_key, address_line, country_code, province_code, ward_code
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			ON CONFLICT (id) DO UPDATE SET
+				email = EXCLUDED.email,
+				display_name = EXCLUDED.display_name,
+				password_hash = EXCLUDED.password_hash,
+				avatar_key = EXCLUDED.avatar_key,
+				address_line = EXCLUDED.address_line,
+				country_code = EXCLUDED.country_code,
+				province_code = EXCLUDED.province_code,
+				ward_code = EXCLUDED.ward_code
+		`
+		_, err := r.pool.Exec(ctx, q,
+			account.ID, account.Email, account.DisplayName, account.PasswordHash, account.CreatedAt,
+			account.AvatarKey, account.AddressLine, account.CountryCode, account.ProvinceCode, account.WardCode,
+		)
+		return err
+	}
 	q := fmt.Sprintf(`
 		INSERT INTO %s (id, email, display_name, password_hash, created_at)
 		VALUES ($1, $2, $3, $4, $5)
@@ -49,6 +76,14 @@ func (r *PostgresAccountRepository) FindByEmail(email string) (domain.Account, e
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	email = strings.ToLower(strings.TrimSpace(email))
+	if r.isMerchant() {
+		q := `
+			SELECT id, email, display_name, password_hash, created_at,
+				avatar_key, address_line, country_code, province_code, ward_code
+			FROM merchants WHERE email = $1
+		`
+		return scanMerchantAccount(r.pool.QueryRow(ctx, q, email))
+	}
 	q := fmt.Sprintf(`
 		SELECT id, email, display_name, password_hash, created_at
 		FROM %s WHERE email = $1
@@ -59,6 +94,14 @@ func (r *PostgresAccountRepository) FindByEmail(email string) (domain.Account, e
 func (r *PostgresAccountRepository) FindByID(id domain.AccountID) (domain.Account, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if r.isMerchant() {
+		q := `
+			SELECT id, email, display_name, password_hash, created_at,
+				avatar_key, address_line, country_code, province_code, ward_code
+			FROM merchants WHERE id = $1
+		`
+		return scanMerchantAccount(r.pool.QueryRow(ctx, q, id))
+	}
 	q := fmt.Sprintf(`
 		SELECT id, email, display_name, password_hash, created_at
 		FROM %s WHERE id = $1
@@ -69,6 +112,28 @@ func (r *PostgresAccountRepository) FindByID(id domain.AccountID) (domain.Accoun
 func (r *PostgresAccountRepository) List() ([]domain.Account, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if r.isMerchant() {
+		q := `
+			SELECT id, email, display_name, password_hash, created_at,
+				avatar_key, address_line, country_code, province_code, ward_code
+			FROM merchants
+			ORDER BY created_at ASC
+		`
+		rows, err := r.pool.Query(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		out := make([]domain.Account, 0)
+		for rows.Next() {
+			a, err := scanMerchantAccount(rows)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, a)
+		}
+		return out, rows.Err()
+	}
 	q := fmt.Sprintf(`
 		SELECT id, email, display_name, password_hash, created_at
 		FROM %s
@@ -134,6 +199,36 @@ func scanAccount(row accountScannable) (domain.Account, error) {
 		DisplayName:  displayName,
 		PasswordHash: passwordHash,
 		CreatedAt:    createdAt.UTC(),
+	}, nil
+}
+
+func scanMerchantAccount(row accountScannable) (domain.Account, error) {
+	var (
+		id, email, displayName, passwordHash string
+		createdAt                            time.Time
+		avatarKey, addressLine, countryCode  string
+		provinceCode, wardCode               string
+	)
+	if err := row.Scan(
+		&id, &email, &displayName, &passwordHash, &createdAt,
+		&avatarKey, &addressLine, &countryCode, &provinceCode, &wardCode,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Account{}, domain.ErrAccountNotFound
+		}
+		return domain.Account{}, err
+	}
+	return domain.Account{
+		ID:           domain.AccountID(id),
+		Email:        email,
+		DisplayName:  displayName,
+		PasswordHash: passwordHash,
+		CreatedAt:    createdAt.UTC(),
+		AvatarKey:    avatarKey,
+		AddressLine:  addressLine,
+		CountryCode:  countryCode,
+		ProvinceCode: provinceCode,
+		WardCode:     wardCode,
 	}, nil
 }
 

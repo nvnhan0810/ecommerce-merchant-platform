@@ -1,100 +1,27 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import {
-  CreateMerchantUseCase,
-  DeleteMerchantUseCase,
-  ListMerchantsUseCase,
-  UpdateMerchantUseCase,
-} from '../application/merchant-use-cases'
+import { RouterLink } from 'vue-router'
+import { DeleteMerchantUseCase, ListMerchantsUseCase } from '../application/merchant-use-cases'
 import { HttpMerchantRepository } from '../infrastructure/http-merchant-repository'
 import type { MerchantAccount } from '../domain/merchant'
 
-const repo = new HttpMerchantRepository()
-const listUseCase = new ListMerchantsUseCase(repo)
-const createUseCase = new CreateMerchantUseCase(repo)
-const updateUseCase = new UpdateMerchantUseCase(repo)
-const deleteUseCase = new DeleteMerchantUseCase(repo)
-
 const queryClient = useQueryClient()
-const formError = ref('')
-const editingId = ref<string | null>(null)
-const showForm = ref(false)
-
-const form = reactive({
-  email: '',
-  displayName: '',
-  password: '',
-})
+const repo = new HttpMerchantRepository()
+const listMerchants = new ListMerchantsUseCase(repo)
+const deleteMerchant = new DeleteMerchantUseCase(repo)
 
 const { data, isLoading, isError, error, refetch } = useQuery({
   queryKey: ['admin', 'merchants'],
-  queryFn: () => listUseCase.execute(),
-})
-
-const isEditing = computed(() => editingId.value !== null)
-
-function resetForm(): void {
-  form.email = ''
-  form.displayName = ''
-  form.password = ''
-  editingId.value = null
-  formError.value = ''
-  showForm.value = false
-}
-
-function openCreate(): void {
-  resetForm()
-  showForm.value = true
-}
-
-function openEdit(merchant: MerchantAccount): void {
-  editingId.value = merchant.id
-  form.email = merchant.email
-  form.displayName = merchant.displayName
-  form.password = ''
-  formError.value = ''
-  showForm.value = true
-}
-
-const saveMutation = useMutation({
-  mutationFn: async () => {
-    if (isEditing.value && editingId.value) {
-      return updateUseCase.execute({
-        id: editingId.value,
-        email: form.email.trim(),
-        displayName: form.displayName.trim(),
-        password: form.password.trim() || undefined,
-      })
-    }
-    return createUseCase.execute({
-      email: form.email.trim(),
-      displayName: form.displayName.trim(),
-      password: form.password,
-    })
-  },
-  onSuccess: async () => {
-    resetForm()
-    await queryClient.invalidateQueries({ queryKey: ['admin', 'merchants'] })
-    await queryClient.invalidateQueries({ queryKey: ['admin', 'overview'] })
-  },
-  onError: (e: Error) => {
-    formError.value = e.message
-  },
+  queryFn: () => listMerchants.execute(),
 })
 
 const deleteMutation = useMutation({
-  mutationFn: (id: string) => deleteUseCase.execute(id),
+  mutationFn: (id: string) => deleteMerchant.execute(id),
   onSuccess: async () => {
     await queryClient.invalidateQueries({ queryKey: ['admin', 'merchants'] })
     await queryClient.invalidateQueries({ queryKey: ['admin', 'overview'] })
   },
 })
-
-async function onSubmit(): Promise<void> {
-  formError.value = ''
-  await saveMutation.mutateAsync()
-}
 
 async function onDelete(merchant: MerchantAccount): Promise<void> {
   if (!window.confirm(`Xóa merchant "${merchant.displayName}"?`)) {
@@ -108,37 +35,8 @@ async function onDelete(merchant: MerchantAccount): Promise<void> {
   <section class="panel">
     <header class="header">
       <h1>Merchants</h1>
-      <button type="button" class="primary" @click="openCreate">Thêm merchant</button>
+      <RouterLink class="primary" to="/merchants/new">Thêm merchant</RouterLink>
     </header>
-
-    <form v-if="showForm" class="form" @submit.prevent="onSubmit" aria-label="Merchant form">
-      <h2>{{ isEditing ? 'Sửa merchant' : 'Tạo merchant' }}</h2>
-      <label>
-        Tên hiển thị
-        <input v-model="form.displayName" required />
-      </label>
-      <label>
-        Email
-        <input v-model="form.email" type="email" required autocomplete="off" />
-      </label>
-      <label>
-        Password
-        <input
-          v-model="form.password"
-          type="password"
-          :required="!isEditing"
-          :placeholder="isEditing ? 'Để trống nếu giữ password cũ' : ''"
-          autocomplete="new-password"
-        />
-      </label>
-      <p v-if="formError" class="error" role="alert">{{ formError }}</p>
-      <div class="actions">
-        <button type="submit" class="primary" :disabled="saveMutation.isPending.value">
-          {{ saveMutation.isPending.value ? 'Đang lưu…' : 'Lưu' }}
-        </button>
-        <button type="button" class="ghost" @click="resetForm">Hủy</button>
-      </div>
-    </form>
 
     <p v-if="isLoading">Đang tải…</p>
     <div v-else-if="isError" class="error">
@@ -147,12 +45,20 @@ async function onDelete(merchant: MerchantAccount): Promise<void> {
     </div>
     <ul v-else-if="data" class="list" aria-label="Danh sách merchant">
       <li v-for="merchant in data" :key="merchant.id">
-        <div>
-          <strong>{{ merchant.displayName }}</strong>
-          <p>{{ merchant.email }}</p>
-        </div>
+        <RouterLink class="item" :to="`/merchants/${merchant.id}`">
+          <div class="avatar" aria-hidden="true">
+            <img v-if="merchant.avatarUrl" :src="merchant.avatarUrl" alt="" />
+            <span v-else>{{ merchant.displayName.charAt(0) }}</span>
+          </div>
+          <div>
+            <strong>{{ merchant.displayName }}</strong>
+            <p>{{ merchant.email }}</p>
+            <p v-if="merchant.formattedAddress" class="addr">{{ merchant.formattedAddress }}</p>
+          </div>
+        </RouterLink>
         <div class="row-actions">
-          <button type="button" class="ghost" @click="openEdit(merchant)">Sửa</button>
+          <RouterLink class="ghost" :to="`/merchants/${merchant.id}`">Xem</RouterLink>
+          <RouterLink class="ghost" :to="`/merchants/${merchant.id}/edit`">Sửa</RouterLink>
           <button
             type="button"
             class="danger"
@@ -186,50 +92,57 @@ async function onDelete(merchant: MerchantAccount): Promise<void> {
   margin: 0;
 }
 
-.form {
-  background: #fff;
+.item {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+  flex: 1;
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 1rem 1.1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  background: #f1f5f9;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #64748b;
+  flex-shrink: 0;
 }
 
-.form h2 {
-  margin: 0;
-  font-size: 1.05rem;
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #334155;
+.addr {
+  color: #64748b !important;
 }
 
-input {
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 0.55rem 0.7rem;
-  font: inherit;
-  font-weight: 400;
-}
-
-.actions,
 .row-actions {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  align-items: center;
 }
 
-button {
+a.primary,
+button,
+a.ghost {
   border-radius: 8px;
   padding: 0.45rem 0.85rem;
   font: inherit;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
 
 button:disabled {
