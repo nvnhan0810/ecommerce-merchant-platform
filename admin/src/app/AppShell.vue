@@ -38,9 +38,11 @@ function logout(): void {
 
 <style scoped>
 .shell {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-columns: 240px 1fr;
+  overflow: hidden;
   background:
     linear-gradient(145deg, #f8fafc 0%, #e2e8f0 50%, #f1f5f9 100%);
   color: #0f172a;
@@ -54,12 +56,15 @@ aside {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .brand {
   color: #fff;
   text-decoration: none;
   font-weight: 800;
+  flex-shrink: 0;
 }
 
 nav {
@@ -67,6 +72,7 @@ nav {
   flex-direction: column;
   gap: 0.5rem;
   flex: 1;
+  min-height: 0;
 }
 
 nav a {
@@ -86,6 +92,8 @@ nav a:hover {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex-shrink: 0;
+  margin-top: auto;
 }
 
 .user {
@@ -110,11 +118,16 @@ button:hover {
 
 main {
   padding: 1.75rem 1.5rem;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 @media (max-width: 800px) {
   .shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+    height: 100dvh;
   }
 
   aside {
@@ -122,11 +135,16 @@ main {
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
+    overflow: visible;
   }
 
   nav {
     flex-direction: row;
     flex: initial;
+  }
+
+  .footer {
+    margin-top: 0;
   }
 }
 </style>
