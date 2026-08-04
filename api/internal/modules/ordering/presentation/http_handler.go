@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	catalogdomain "github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/domain"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/application/commands"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/application/queries"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/domain"
@@ -18,14 +19,16 @@ type OrderingHandler struct {
 	list         *queries.ListOrdersHandler
 	get          *queries.GetOrderHandler
 	updateStatus *commands.UpdateOrderStatusHandler
+	create       *commands.CreateOrderHandler
 }
 
 func NewOrderingHandler(
 	list *queries.ListOrdersHandler,
 	get *queries.GetOrderHandler,
 	updateStatus *commands.UpdateOrderStatusHandler,
+	create *commands.CreateOrderHandler,
 ) *OrderingHandler {
-	return &OrderingHandler{list: list, get: get, updateStatus: updateStatus}
+	return &OrderingHandler{list: list, get: get, updateStatus: updateStatus, create: create}
 }
 
 func merchantIDFromClaims(r *http.Request) (string, bool) {
@@ -34,6 +37,10 @@ func merchantIDFromClaims(r *http.Request) (string, bool) {
 		return "", false
 	}
 	return string(claims.UserID), true
+}
+
+func userIDFromClaims(r *http.Request) (string, bool) {
+	return merchantIDFromClaims(r)
 }
 
 func actorFromRequest(r *http.Request) domain.Actor {
@@ -179,15 +186,107 @@ func (h *OrderingHandler) UpdateMerchantOrderStatus(w http.ResponseWriter, r *ht
 	writeJSON(w, http.StatusOK, map[string]any{"data": item})
 }
 
+type createOrderBody struct {
+	Note  string `json:"note"`
+	Items []struct {
+		ProductID string `json:"product_id"`
+		Quantity  int    `json:"quantity"`
+	} `json:"items"`
+}
+
+func (h *OrderingHandler) CreateUserOrder(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var body createOrderBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	items := make([]commands.CreateOrderItemInput, 0, len(body.Items))
+	for _, item := range body.Items {
+		items = append(items, commands.CreateOrderItemInput{
+			ProductID: item.ProductID,
+			Quantity:  item.Quantity,
+		})
+	}
+	created, err := h.create.Handle(r.Context(), commands.CreateOrderCommand{
+		UserID: userID,
+		Note:   body.Note,
+		Items:  items,
+		Actor:  actorFromRequest(r),
+	})
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"data": created})
+}
+
+func (h *OrderingHandler) ListUserOrders(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	items, err := h.list.Handle(r.Context(), queries.ListOrdersQuery{
+		Limit:  limit,
+		Offset: offset,
+		Code:   r.URL.Query().Get("code"),
+		Status: r.URL.Query().Get("status"),
+		UserID: userID,
+	})
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func (h *OrderingHandler) GetUserOrder(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := domain.ParseOrderID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	item, err := h.get.Handle(r.Context(), queries.GetOrderQuery{
+		ID:          id,
+		OwnerUserID: userID,
+	})
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
 func writeOrderingError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	switch {
-	case errors.Is(err, domain.ErrOrderNotFound):
+	case errors.Is(err, domain.ErrOrderNotFound),
+		errors.Is(err, catalogdomain.ErrProductNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, domain.ErrInvalidOrderID),
 		errors.Is(err, domain.ErrInvalidOrderCode),
-		errors.Is(err, domain.ErrInvalidOrderStatus):
+		errors.Is(err, domain.ErrInvalidOrderStatus),
+		errors.Is(err, domain.ErrEmptyOrderItems),
+		errors.Is(err, domain.ErrInvalidOrderQuantity),
+		errors.Is(err, domain.ErrInvalidOrderPrice),
+		errors.Is(err, domain.ErrUserRequired),
+		errors.Is(err, catalogdomain.ErrInvalidProductID),
+		errors.Is(err, catalogdomain.ErrInvalidQuantity):
 		status = http.StatusBadRequest
+	case errors.Is(err, catalogdomain.ErrInsufficientStock):
+		status = http.StatusConflict
 	}
 	writeError(w, status, err.Error())
 }

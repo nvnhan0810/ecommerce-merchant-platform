@@ -10,6 +10,7 @@ import (
 type GetOrderQuery struct {
 	ID              domain.OrderID
 	OwnerMerchantID string // when set, order must belong to this merchant
+	OwnerUserID     string // when set, order must belong to this user
 }
 
 type GetOrderHandler struct {
@@ -25,8 +26,10 @@ func (h *GetOrderHandler) Handle(_ context.Context, q GetOrderQuery) (OrderDTO, 
 	if err != nil {
 		return OrderDTO{}, err
 	}
-	owner := strings.TrimSpace(q.OwnerMerchantID)
-	if owner != "" && order.MerchantID != owner {
+	if owner := strings.TrimSpace(q.OwnerMerchantID); owner != "" && order.MerchantID != owner {
+		return OrderDTO{}, domain.ErrOrderNotFound
+	}
+	if owner := strings.TrimSpace(q.OwnerUserID); owner != "" && order.UserID != owner {
 		return OrderDTO{}, domain.ErrOrderNotFound
 	}
 	return ToDTOWithHistory(order, true), nil

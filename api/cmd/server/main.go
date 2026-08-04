@@ -97,8 +97,10 @@ func main() {
 			identityqueries.NewGetMerchantHandler(merchantRepo),
 			identitycommands.NewLoginHandler(adminRepo, hasher, tokens, identitydomain.RoleAdmin),
 			identitycommands.NewLoginHandler(merchantRepo, hasher, tokens, identitydomain.RoleMerchant),
+			identitycommands.NewLoginHandler(userRepo, hasher, tokens, identitydomain.RoleUser),
 			identityqueries.NewGetCurrentUserHandler(adminRepo, identitydomain.RoleAdmin),
 			identityqueries.NewGetCurrentUserHandler(merchantRepo, identitydomain.RoleMerchant),
+			identityqueries.NewGetCurrentUserHandler(userRepo, identitydomain.RoleUser),
 			identitycommands.NewCreateUserHandler(userRepo, hasher),
 			identitycommands.NewUpdateUserHandler(userRepo, hasher),
 			identitycommands.NewDeleteUserHandler(userRepo),
@@ -110,6 +112,7 @@ func main() {
 			orderingqueries.NewListOrdersHandler(orderRepo),
 			orderingqueries.NewGetOrderHandler(orderRepo),
 			orderingcommands.NewUpdateOrderStatusHandler(orderRepo),
+			orderingcommands.NewCreateOrderHandler(orderRepo, productRepo),
 		),
 		Tokens: tokens,
 	})

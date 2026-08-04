@@ -36,13 +36,20 @@
   gap: 1rem;
 }
 
-.nav a {
+.nav a,
+.linkBtn {
   color: #334155;
   text-decoration: none;
   font-weight: 500;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
 }
 
-.nav a:hover {
+.nav a:hover,
+.linkBtn:hover {
   color: #0f766e;
 }
 

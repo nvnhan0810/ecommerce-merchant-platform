@@ -70,8 +70,10 @@ func newTestServer(t *testing.T) http.Handler {
 			identityqueries.NewGetMerchantHandler(merchants),
 			identitycommands.NewLoginHandler(admins, hasher, tokens, identitydomain.RoleAdmin),
 			identitycommands.NewLoginHandler(merchants, hasher, tokens, identitydomain.RoleMerchant),
+			identitycommands.NewLoginHandler(users, hasher, tokens, identitydomain.RoleUser),
 			identityqueries.NewGetCurrentUserHandler(admins, identitydomain.RoleAdmin),
 			identityqueries.NewGetCurrentUserHandler(merchants, identitydomain.RoleMerchant),
+			identityqueries.NewGetCurrentUserHandler(users, identitydomain.RoleUser),
 			identitycommands.NewCreateUserHandler(users, hasher),
 			identitycommands.NewUpdateUserHandler(users, hasher),
 			identitycommands.NewDeleteUserHandler(users),
@@ -83,6 +85,7 @@ func newTestServer(t *testing.T) http.Handler {
 			orderingqueries.NewListOrdersHandler(orderRepo),
 			orderingqueries.NewGetOrderHandler(orderRepo),
 			orderingcommands.NewUpdateOrderStatusHandler(orderRepo),
+			orderingcommands.NewCreateOrderHandler(orderRepo, productRepo),
 		),
 		Tokens: tokens,
 	})
@@ -709,5 +712,112 @@ func TestMerchantOrders_should_list_get_and_update_own_only(t *testing.T) {
 	}
 	if patched.Data.Status != "confirmed" {
 		t.Fatalf("status=%s want confirmed", patched.Data.Status)
+	}
+}
+
+func userToken(t *testing.T, srv http.Handler) string {
+	t.Helper()
+	body := bytes.NewBufferString(`{"email":"buyer@ecomerce.local","password":"Buyer@123456"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/user/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("user login status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload.AccessToken
+}
+
+func TestUserStorefront_login_create_order_and_list(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+
+	pub := httptest.NewRequest(http.MethodGet, "/api/v1/products?limit=5", nil)
+	pubRec := httptest.NewRecorder()
+	srv.ServeHTTP(pubRec, pub)
+	if pubRec.Code != http.StatusOK {
+		t.Fatalf("public list=%d", pubRec.Code)
+	}
+	var products struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(pubRec.Body.Bytes(), &products); err != nil {
+		t.Fatal(err)
+	}
+	if len(products.Data) == 0 {
+		t.Fatal("expected products")
+	}
+	productID := products.Data[0].ID
+
+	detail := httptest.NewRequest(http.MethodGet, "/api/v1/products/"+productID, nil)
+	detailRec := httptest.NewRecorder()
+	srv.ServeHTTP(detailRec, detail)
+	if detailRec.Code != http.StatusOK {
+		t.Fatalf("public get=%d", detailRec.Code)
+	}
+
+	token := userToken(t, srv)
+	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/user/me", nil)
+	meReq.Header.Set("Authorization", "Bearer "+token)
+	meRec := httptest.NewRecorder()
+	srv.ServeHTTP(meRec, meReq)
+	if meRec.Code != http.StatusOK {
+		t.Fatalf("me status=%d body=%s", meRec.Code, meRec.Body.String())
+	}
+
+	createBody := bytes.NewBufferString(`{"note":"web checkout","items":[{"product_id":"` + productID + `","quantity":1}]}`)
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/orders", createBody)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createRec := httptest.NewRecorder()
+	srv.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create order status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created struct {
+		Data []struct {
+			ID   string `json:"id"`
+			Code string `json:"code"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if len(created.Data) != 1 || created.Data[0].Code == "" {
+		t.Fatalf("unexpected create: %+v", created.Data)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/me/orders?limit=50", nil)
+	listReq.Header.Set("Authorization", "Bearer "+token)
+	listRec := httptest.NewRecorder()
+	srv.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list me orders=%d", listRec.Code)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/me/orders/"+created.Data[0].ID, nil)
+	getReq.Header.Set("Authorization", "Bearer "+token)
+	getRec := httptest.NewRecorder()
+	srv.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get me order=%d body=%s", getRec.Code, getRec.Body.String())
+	}
+
+	profileBody := bytes.NewBufferString(`{"email":"buyer@ecomerce.local","display_name":"Buyer Updated","password":""}`)
+	profileReq := httptest.NewRequest(http.MethodPut, "/api/v1/auth/user/me", profileBody)
+	profileReq.Header.Set("Content-Type", "application/json")
+	profileReq.Header.Set("Authorization", "Bearer "+token)
+	profileRec := httptest.NewRecorder()
+	srv.ServeHTTP(profileRec, profileReq)
+	if profileRec.Code != http.StatusOK {
+		t.Fatalf("profile status=%d body=%s", profileRec.Code, profileRec.Body.String())
 	}
 }

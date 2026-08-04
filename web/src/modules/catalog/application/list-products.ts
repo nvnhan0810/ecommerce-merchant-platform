@@ -3,7 +3,15 @@ import type { Product, ProductRepository } from '../domain/product'
 export class ListProductsUseCase {
   constructor(private readonly repo: ProductRepository) {}
 
-  async execute(limit = 20): Promise<Product[]> {
+  execute(limit?: number): Promise<Product[]> {
     return this.repo.list(limit)
+  }
+}
+
+export class GetProductUseCase {
+  constructor(private readonly repo: ProductRepository) {}
+
+  execute(id: string): Promise<Product> {
+    return this.repo.getById(id)
   }
 }
