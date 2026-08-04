@@ -28,6 +28,27 @@ func NewOrderingHandler(
 	return &OrderingHandler{list: list, get: get, updateStatus: updateStatus}
 }
 
+func merchantIDFromClaims(r *http.Request) (string, bool) {
+	claims, ok := authctx.FromContext(r.Context())
+	if !ok || claims.UserID == "" {
+		return "", false
+	}
+	return string(claims.UserID), true
+}
+
+func actorFromRequest(r *http.Request) domain.Actor {
+	actor := domain.SystemActor()
+	if claims, ok := authctx.FromContext(r.Context()); ok {
+		actor = domain.Actor{
+			ID:          string(claims.UserID),
+			Email:       claims.Email,
+			Role:        string(claims.Role),
+			DisplayName: claims.Email,
+		}
+	}
+	return actor
+}
+
 func (h *OrderingHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
@@ -73,19 +94,83 @@ func (h *OrderingHandler) UpdateOrderStatus(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
-	actor := domain.SystemActor()
-	if claims, ok := authctx.FromContext(r.Context()); ok {
-		actor = domain.Actor{
-			ID:          string(claims.UserID),
-			Email:       claims.Email,
-			Role:        string(claims.Role),
-			DisplayName: claims.Email,
-		}
-	}
 	item, err := h.updateStatus.Handle(r.Context(), commands.UpdateOrderStatusCommand{
 		ID:     id,
 		Status: strings.TrimSpace(body.Status),
-		Actor:  actor,
+		Actor:  actorFromRequest(r),
+	})
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+func (h *OrderingHandler) ListMerchantOrders(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	items, err := h.list.Handle(r.Context(), queries.ListOrdersQuery{
+		Limit:      limit,
+		Offset:     offset,
+		Code:       r.URL.Query().Get("code"),
+		Status:     r.URL.Query().Get("status"),
+		MerchantID: merchantID,
+	})
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func (h *OrderingHandler) GetMerchantOrder(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := domain.ParseOrderID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	item, err := h.get.Handle(r.Context(), queries.GetOrderQuery{
+		ID:              id,
+		OwnerMerchantID: merchantID,
+	})
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+func (h *OrderingHandler) UpdateMerchantOrderStatus(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := domain.ParseOrderID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	var body updateStatusBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	item, err := h.updateStatus.Handle(r.Context(), commands.UpdateOrderStatusCommand{
+		ID:              id,
+		Status:          strings.TrimSpace(body.Status),
+		Actor:           actorFromRequest(r),
+		OwnerMerchantID: merchantID,
 	})
 	if err != nil {
 		writeOrderingError(w, err)

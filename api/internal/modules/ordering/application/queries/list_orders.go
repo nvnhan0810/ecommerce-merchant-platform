@@ -115,10 +115,11 @@ func toEventDTO(ev domain.OrderEvent) OrderEventDTO {
 }
 
 type ListOrdersQuery struct {
-	Limit  int
-	Offset int
-	Code   string
-	Status string
+	Limit      int
+	Offset     int
+	Code       string
+	Status     string
+	MerchantID string // when set, only return orders for this merchant
 }
 
 type ListOrdersHandler struct {
@@ -130,11 +131,15 @@ func NewListOrdersHandler(repo domain.OrderRepository) *ListOrdersHandler {
 }
 
 func (h *ListOrdersHandler) Handle(_ context.Context, q ListOrdersQuery) ([]OrderDTO, error) {
+	merchantID := strings.TrimSpace(q.MerchantID)
 	code := strings.TrimSpace(q.Code)
 	if code != "" {
 		order, err := h.repo.FindByCode(code)
 		if err != nil {
 			return nil, err
+		}
+		if merchantID != "" && order.MerchantID != merchantID {
+			return []OrderDTO{}, nil
 		}
 		statusFilter := strings.TrimSpace(q.Status)
 		if statusFilter != "" && string(order.Status) != statusFilter {
@@ -152,7 +157,15 @@ func (h *ListOrdersHandler) Handle(_ context.Context, q ListOrdersQuery) ([]Orde
 		offset = 0
 	}
 
-	items, err := h.repo.List(limit, offset)
+	var (
+		items []domain.Order
+		err   error
+	)
+	if merchantID != "" {
+		items, err = h.repo.ListByMerchant(merchantID, limit, offset)
+	} else {
+		items, err = h.repo.List(limit, offset)
+	}
 	if err != nil {
 		return nil, err
 	}

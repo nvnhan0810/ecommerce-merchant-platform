@@ -172,6 +172,40 @@ func (r *PostgresOrderRepository) List(limit, offset int) ([]domain.Order, error
 	return out, rows.Err()
 }
 
+func (r *PostgresOrderRepository) ListByMerchant(merchantID string, limit, offset int) ([]domain.Order, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note, created_at, updated_at
+		FROM orders
+		WHERE merchant_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`, merchantID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.Order, 0)
+	for rows.Next() {
+		o, err := scanOrder(rows)
+		if err != nil {
+			return nil, err
+		}
+		items, err := r.loadItems(ctx, o.ID)
+		if err != nil {
+			return nil, err
+		}
+		o.Items = items
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
 func (r *PostgresOrderRepository) Count() (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

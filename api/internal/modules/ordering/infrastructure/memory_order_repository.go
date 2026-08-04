@@ -74,6 +74,26 @@ func (r *InMemoryOrderRepository) List(limit, offset int) ([]domain.Order, error
 	return out, nil
 }
 
+func (r *InMemoryOrderRepository) ListByMerchant(merchantID string, limit, offset int) ([]domain.Order, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	filtered := make([]domain.Order, 0)
+	for _, id := range r.order {
+		o := r.items[id]
+		if o.MerchantID == merchantID {
+			filtered = append(filtered, cloneOrder(o))
+		}
+	}
+	if offset >= len(filtered) {
+		return []domain.Order{}, nil
+	}
+	end := offset + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	return filtered[offset:end], nil
+}
+
 func (r *InMemoryOrderRepository) Count() (int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
