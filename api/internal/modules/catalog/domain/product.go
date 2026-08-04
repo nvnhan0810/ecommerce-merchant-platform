@@ -16,6 +16,7 @@ var (
 	ErrMerchantNotFound    = errors.New("merchant not found")
 	ErrInvalidProductID    = errors.New("product id is required")
 	ErrInvalidImage        = errors.New("invalid product image")
+	ErrProductHasOrders    = errors.New("product is referenced by existing orders and cannot be deleted")
 )
 
 type Money struct {
@@ -119,5 +120,7 @@ type ProductRepository interface {
 	Save(product Product) error
 	FindByID(id ProductID) (Product, error)
 	List(limit, offset int) ([]Product, error)
+	ListByMerchant(merchantID string, limit, offset int) ([]Product, error)
+	HasOrderItems(id ProductID) (bool, error)
 	Delete(id ProductID) error
 }

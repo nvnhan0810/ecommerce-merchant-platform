@@ -52,6 +52,13 @@ func NewRouter(deps Dependencies) http.Handler {
 			merchant.Use(BearerAuth(deps.Tokens))
 			merchant.Use(RequireMerchant)
 			merchant.Get("/auth/merchant/me", deps.Identity.MerchantMe)
+			merchant.Get("/merchant/products", deps.Catalog.ListMerchantProducts)
+			merchant.Post("/merchant/products", deps.Catalog.CreateMerchantProduct)
+			merchant.Get("/merchant/products/{id}", deps.Catalog.GetMerchantProduct)
+			merchant.Put("/merchant/products/{id}", deps.Catalog.UpdateMerchantProduct)
+			merchant.Delete("/merchant/products/{id}", deps.Catalog.DeleteMerchantProduct)
+			merchant.Post("/merchant/products/{id}/image", deps.Catalog.UploadMerchantProductImage)
+			merchant.Delete("/merchant/products/{id}/image", deps.Catalog.DeleteMerchantProductImage)
 		})
 
 		api.Group(func(admin chi.Router) {

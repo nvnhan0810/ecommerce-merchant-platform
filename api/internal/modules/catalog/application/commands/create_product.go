@@ -74,11 +74,12 @@ func toProductResult(product domain.Product, publicBase string) ProductResult {
 }
 
 type UploadProductImageCommand struct {
-	ID          domain.ProductID
-	Filename    string
-	ContentType string
-	Size        int64
-	Body        io.Reader
+	ID              domain.ProductID
+	OwnerMerchantID string
+	Filename        string
+	ContentType     string
+	Size            int64
+	Body            io.Reader
 }
 
 type UploadProductImageHandler struct {
@@ -98,6 +99,9 @@ func (h *UploadProductImageHandler) Handle(ctx context.Context, cmd UploadProduc
 	product, err := h.repo.FindByID(cmd.ID)
 	if err != nil {
 		return ProductResult{}, err
+	}
+	if cmd.OwnerMerchantID != "" && product.MerchantID != cmd.OwnerMerchantID {
+		return ProductResult{}, domain.ErrProductNotFound
 	}
 	ct := strings.ToLower(strings.TrimSpace(cmd.ContentType))
 	switch ct {
@@ -135,10 +139,18 @@ func NewDeleteProductImageHandler(repo domain.ProductRepository, store storage.O
 	return &DeleteProductImageHandler{repo: repo, store: store, publicBase: publicBase}
 }
 
-func (h *DeleteProductImageHandler) Handle(ctx context.Context, id domain.ProductID) (ProductResult, error) {
-	product, err := h.repo.FindByID(id)
+type DeleteProductImageCommand struct {
+	ID              domain.ProductID
+	OwnerMerchantID string
+}
+
+func (h *DeleteProductImageHandler) Handle(ctx context.Context, cmd DeleteProductImageCommand) (ProductResult, error) {
+	product, err := h.repo.FindByID(cmd.ID)
 	if err != nil {
 		return ProductResult{}, err
+	}
+	if cmd.OwnerMerchantID != "" && product.MerchantID != cmd.OwnerMerchantID {
+		return ProductResult{}, domain.ErrProductNotFound
 	}
 	old := product.ImageKey
 	product.ClearImage()

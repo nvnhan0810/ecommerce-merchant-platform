@@ -2,12 +2,15 @@ package queries
 
 import (
 	"context"
+	"strings"
 
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/domain"
 )
 
 type GetProductQuery struct {
-	ID domain.ProductID
+	ID                domain.ProductID
+	OwnerMerchantID   string
+	IncludeOrderFlags bool
 }
 
 type GetProductHandler struct {
@@ -24,5 +27,19 @@ func (h *GetProductHandler) Handle(_ context.Context, q GetProductQuery) (Produc
 	if err != nil {
 		return ProductDTO{}, err
 	}
-	return toDTO(p, h.publicBase), nil
+	owner := strings.TrimSpace(q.OwnerMerchantID)
+	if owner != "" && p.MerchantID != owner {
+		return ProductDTO{}, domain.ErrProductNotFound
+	}
+	dto := toDTO(p, h.publicBase)
+	if q.IncludeOrderFlags {
+		hasOrders, err := h.repo.HasOrderItems(p.ID)
+		if err != nil {
+			return ProductDTO{}, err
+		}
+		canDelete := !hasOrders
+		dto.HasOrders = &hasOrders
+		dto.CanDelete = &canDelete
+	}
+	return dto, nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/application/commands"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/application/queries"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/domain"
+	"github.com/nvnhan0810/ecomerce-api/internal/platform/authctx"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/storage"
 )
 
@@ -138,6 +139,216 @@ func (h *CatalogHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type merchantProductBody struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	PriceCents  int64  `json:"price_cents"`
+	Currency    string `json:"currency"`
+	Stock       int    `json:"stock"`
+}
+
+func merchantIDFromClaims(r *http.Request) (string, bool) {
+	claims, ok := authctx.FromContext(r.Context())
+	if !ok || claims.UserID == "" {
+		return "", false
+	}
+	return string(claims.UserID), true
+}
+
+func (h *CatalogHandler) ListMerchantProducts(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	items, err := h.list.Handle(r.Context(), queries.ListProductsQuery{
+		Limit:             limit,
+		Offset:            offset,
+		MerchantID:        merchantID,
+		IncludeOrderFlags: true,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func (h *CatalogHandler) CreateMerchantProduct(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var body merchantProductBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.create.Handle(r.Context(), commands.CreateProductCommand{
+		MerchantID:  merchantID,
+		Name:        body.Name,
+		Description: body.Description,
+		PriceCents:  body.PriceCents,
+		Currency:    body.Currency,
+		Stock:       body.Stock,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"data": res})
+}
+
+func (h *CatalogHandler) GetMerchantProduct(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	item, err := h.get.Handle(r.Context(), queries.GetProductQuery{
+		ID:                id,
+		OwnerMerchantID:   merchantID,
+		IncludeOrderFlags: true,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+func (h *CatalogHandler) UpdateMerchantProduct(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	var body merchantProductBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.update.Handle(r.Context(), commands.UpdateProductCommand{
+		ID:              id,
+		OwnerMerchantID: merchantID,
+		Name:            body.Name,
+		Description:     body.Description,
+		PriceCents:      body.PriceCents,
+		Currency:        body.Currency,
+		Stock:           body.Stock,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
+func (h *CatalogHandler) DeleteMerchantProduct(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	if err := h.delete.Handle(r.Context(), commands.DeleteProductCommand{
+		ID:              id,
+		OwnerMerchantID: merchantID,
+	}); err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *CatalogHandler) UploadMerchantProductImage(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	if err := r.ParseMultipartForm(6 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid multipart form")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+
+	limited := http.MaxBytesReader(w, file, 5<<20)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file too large or unreadable (max 5MB)")
+		return
+	}
+	if len(data) == 0 {
+		writeCatalogError(w, domain.ErrInvalidImage)
+		return
+	}
+	ct := http.DetectContentType(data)
+
+	res, err := h.uploadImage.Handle(r.Context(), commands.UploadProductImageCommand{
+		ID:              id,
+		OwnerMerchantID: merchantID,
+		Filename:        header.Filename,
+		ContentType:     ct,
+		Size:            int64(len(data)),
+		Body:            bytes.NewReader(data),
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
+func (h *CatalogHandler) DeleteMerchantProductImage(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	res, err := h.deleteImage.Handle(r.Context(), commands.DeleteProductImageCommand{
+		ID:              id,
+		OwnerMerchantID: merchantID,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
 func (h *CatalogHandler) UploadProductImage(w http.ResponseWriter, r *http.Request) {
 	id, err := domain.ParseProductID(chi.URLParam(r, "id"))
 	if err != nil {
@@ -187,7 +398,7 @@ func (h *CatalogHandler) DeleteProductImage(w http.ResponseWriter, r *http.Reque
 		writeCatalogError(w, err)
 		return
 	}
-	res, err := h.deleteImage.Handle(r.Context(), id)
+	res, err := h.deleteImage.Handle(r.Context(), commands.DeleteProductImageCommand{ID: id})
 	if err != nil {
 		writeCatalogError(w, err)
 		return
@@ -222,6 +433,8 @@ func writeCatalogError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrProductNotFound), errors.Is(err, domain.ErrMerchantNotFound):
 		status = http.StatusNotFound
+	case errors.Is(err, domain.ErrProductHasOrders):
+		status = http.StatusConflict
 	case errors.Is(err, domain.ErrInvalidProductName),
 		errors.Is(err, domain.ErrInvalidProductPrice),
 		errors.Is(err, domain.ErrMerchantRequired),
