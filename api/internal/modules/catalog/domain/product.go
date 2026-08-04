@@ -17,6 +17,8 @@ var (
 	ErrInvalidProductID    = errors.New("product id is required")
 	ErrInvalidImage        = errors.New("invalid product image")
 	ErrProductHasOrders    = errors.New("product is referenced by existing orders and cannot be deleted")
+	ErrInsufficientStock   = errors.New("insufficient product stock")
+	ErrInvalidQuantity     = errors.New("quantity must be greater than zero")
 )
 
 type Money struct {
@@ -109,6 +111,17 @@ func (p *Product) SetImageKey(key string) {
 
 func (p *Product) ClearImage() {
 	p.ImageKey = ""
+}
+
+func (p *Product) Reserve(quantity int) error {
+	if quantity <= 0 {
+		return ErrInvalidQuantity
+	}
+	if p.Stock < quantity {
+		return ErrInsufficientStock
+	}
+	p.Stock -= quantity
+	return nil
 }
 
 // MerchantChecker verifies a merchant account exists for product ownership.

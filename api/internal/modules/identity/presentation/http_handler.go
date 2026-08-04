@@ -19,8 +19,10 @@ type IdentityHandler struct {
 	getMerchant    *queries.GetMerchantHandler
 	login          *commands.LoginHandler
 	merchantLogin  *commands.LoginHandler
+	userLogin      *commands.LoginHandler
 	me             *queries.GetCurrentUserHandler
 	merchantMe     *queries.GetCurrentUserHandler
+	userMe         *queries.GetCurrentUserHandler
 	createUser     *commands.CreateUserHandler
 	updateUser     *commands.UpdateUserHandler
 	deleteUser     *commands.DeleteUserHandler
@@ -36,8 +38,10 @@ func NewIdentityHandler(
 	getMerchant *queries.GetMerchantHandler,
 	login *commands.LoginHandler,
 	merchantLogin *commands.LoginHandler,
+	userLogin *commands.LoginHandler,
 	me *queries.GetCurrentUserHandler,
 	merchantMe *queries.GetCurrentUserHandler,
+	userMe *queries.GetCurrentUserHandler,
 	createUser *commands.CreateUserHandler,
 	updateUser *commands.UpdateUserHandler,
 	deleteUser *commands.DeleteUserHandler,
@@ -52,8 +56,10 @@ func NewIdentityHandler(
 		getMerchant:    getMerchant,
 		login:          login,
 		merchantLogin:  merchantLogin,
+		userLogin:      userLogin,
 		me:             me,
 		merchantMe:     merchantMe,
+		userMe:         userMe,
 		createUser:     createUser,
 		updateUser:     updateUser,
 		deleteUser:     deleteUser,
@@ -128,6 +134,61 @@ func (h *IdentityHandler) MerchantMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": user})
+}
+
+func (h *IdentityHandler) UserLogin(w http.ResponseWriter, r *http.Request) {
+	var body loginRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.userLogin.Handle(r.Context(), commands.LoginCommand{
+		Email:    body.Email,
+		Password: body.Password,
+	})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (h *IdentityHandler) UserMe(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authctx.FromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	user, err := h.userMe.Handle(r.Context(), queries.GetCurrentUserQuery{UserID: claims.UserID})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": user})
+}
+
+func (h *IdentityHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authctx.FromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var body accountBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.updateUser.Handle(r.Context(), commands.UpdateUserCommand{
+		ID:          claims.UserID,
+		Email:       body.Email,
+		DisplayName: body.DisplayName,
+		Password:    body.Password,
+	})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
 }
 
 func (h *IdentityHandler) ListMerchants(w http.ResponseWriter, r *http.Request) {

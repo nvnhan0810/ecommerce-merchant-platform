@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ListProductsUseCase } from '../application/list-products'
 import { HttpProductRepository } from '../infrastructure/http-product-repository'
@@ -9,7 +10,7 @@ const listProducts = new ListProductsUseCase(new HttpProductRepository())
 export function ProductCatalog(): JSX.Element {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['catalog', 'products'],
-    queryFn: () => listProducts.execute(20),
+    queryFn: () => listProducts.execute(40),
   })
 
   if (isLoading) {
@@ -35,14 +36,21 @@ export function ProductCatalog(): JSX.Element {
     <ul className={styles.grid} aria-label="Danh sách sản phẩm">
       {data.map((product) => (
         <li key={product.id.value} className={styles.card}>
-          <h3>{product.name}</h3>
-          <p className={styles.desc}>{product.description}</p>
-          <div className={styles.meta}>
-            <span className={styles.price}>{product.price.format()}</span>
-            <span className={product.isAvailable ? styles.inStock : styles.out}>
-              {product.isAvailable ? `Còn ${product.stock}` : 'Hết hàng'}
-            </span>
-          </div>
+          <Link to={`/products/${product.id.value}`} className={styles.link}>
+            {product.imageUrl ? (
+              <img className={styles.thumb} src={product.imageUrl} alt={product.name} />
+            ) : (
+              <div className={styles.placeholder} aria-hidden="true" />
+            )}
+            <h3>{product.name}</h3>
+            <p className={styles.desc}>{product.description}</p>
+            <div className={styles.meta}>
+              <span className={styles.price}>{product.price.format()}</span>
+              <span className={product.isAvailable ? styles.inStock : styles.out}>
+                {product.isAvailable ? `Còn ${product.stock}` : 'Hết hàng'}
+              </span>
+            </div>
+          </Link>
         </li>
       ))}
     </ul>

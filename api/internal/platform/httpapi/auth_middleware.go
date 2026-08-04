@@ -50,6 +50,17 @@ func RequireMerchant(next http.Handler) http.Handler {
 	})
 }
 
+func RequireUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := authctx.FromContext(r.Context())
+		if !ok || claims.Role != domain.RoleUser {
+			writeAuthError(w, http.StatusForbidden, "user role required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func writeAuthError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

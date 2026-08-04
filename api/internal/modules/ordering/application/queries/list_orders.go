@@ -120,6 +120,7 @@ type ListOrdersQuery struct {
 	Code       string
 	Status     string
 	MerchantID string // when set, only return orders for this merchant
+	UserID     string // when set, only return orders for this user
 }
 
 type ListOrdersHandler struct {
@@ -132,6 +133,7 @@ func NewListOrdersHandler(repo domain.OrderRepository) *ListOrdersHandler {
 
 func (h *ListOrdersHandler) Handle(_ context.Context, q ListOrdersQuery) ([]OrderDTO, error) {
 	merchantID := strings.TrimSpace(q.MerchantID)
+	userID := strings.TrimSpace(q.UserID)
 	code := strings.TrimSpace(q.Code)
 	if code != "" {
 		order, err := h.repo.FindByCode(code)
@@ -139,6 +141,9 @@ func (h *ListOrdersHandler) Handle(_ context.Context, q ListOrdersQuery) ([]Orde
 			return nil, err
 		}
 		if merchantID != "" && order.MerchantID != merchantID {
+			return []OrderDTO{}, nil
+		}
+		if userID != "" && order.UserID != userID {
 			return []OrderDTO{}, nil
 		}
 		statusFilter := strings.TrimSpace(q.Status)
@@ -161,9 +166,12 @@ func (h *ListOrdersHandler) Handle(_ context.Context, q ListOrdersQuery) ([]Orde
 		items []domain.Order
 		err   error
 	)
-	if merchantID != "" {
+	switch {
+	case merchantID != "":
 		items, err = h.repo.ListByMerchant(merchantID, limit, offset)
-	} else {
+	case userID != "":
+		items, err = h.repo.ListByUser(userID, limit, offset)
+	default:
 		items, err = h.repo.List(limit, offset)
 	}
 	if err != nil {

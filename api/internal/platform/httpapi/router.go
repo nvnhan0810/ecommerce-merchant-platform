@@ -43,10 +43,22 @@ func NewRouter(deps Dependencies) http.Handler {
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Get("/products", deps.Catalog.ListProducts)
+		api.Get("/products/{id}", deps.Catalog.GetProduct)
 		api.Get("/media/*", deps.Catalog.ServeMedia)
 
 		api.Post("/auth/login", deps.Identity.Login)
 		api.Post("/auth/merchant/login", deps.Identity.MerchantLogin)
+		api.Post("/auth/user/login", deps.Identity.UserLogin)
+
+		api.Group(func(user chi.Router) {
+			user.Use(BearerAuth(deps.Tokens))
+			user.Use(RequireUser)
+			user.Get("/auth/user/me", deps.Identity.UserMe)
+			user.Put("/auth/user/me", deps.Identity.UpdateProfile)
+			user.Post("/orders", deps.Ordering.CreateUserOrder)
+			user.Get("/me/orders", deps.Ordering.ListUserOrders)
+			user.Get("/me/orders/{id}", deps.Ordering.GetUserOrder)
+		})
 
 		api.Group(func(merchant chi.Router) {
 			merchant.Use(BearerAuth(deps.Tokens))
@@ -79,7 +91,6 @@ func NewRouter(deps Dependencies) http.Handler {
 			admin.Put("/users/{id}", deps.Identity.UpdateUser)
 			admin.Delete("/users/{id}", deps.Identity.DeleteUser)
 			admin.Post("/products", deps.Catalog.CreateProduct)
-			admin.Get("/products/{id}", deps.Catalog.GetProduct)
 			admin.Put("/products/{id}", deps.Catalog.UpdateProduct)
 			admin.Delete("/products/{id}", deps.Catalog.DeleteProduct)
 			admin.Post("/products/{id}/image", deps.Catalog.UploadProductImage)

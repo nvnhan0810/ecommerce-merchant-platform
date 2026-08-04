@@ -355,6 +355,7 @@ type OrderRepository interface {
 	FindByCode(code string) (Order, error)
 	List(limit, offset int) ([]Order, error)
 	ListByMerchant(merchantID string, limit, offset int) ([]Order, error)
+	ListByUser(userID string, limit, offset int) ([]Order, error)
 	Count() (int, error)
 }
 
