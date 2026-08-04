@@ -16,6 +16,7 @@ import (
 	healthpres "github.com/nvnhan0810/ecomerce-api/internal/modules/health/presentation"
 	identitycommands "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/commands"
 	identityqueries "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/queries"
+	identitydomain "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
 	identityinfra "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/infrastructure"
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
 	orderingcommands "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/application/commands"
@@ -94,8 +95,10 @@ func main() {
 			identityqueries.NewListMerchantsHandler(merchantRepo),
 			identityqueries.NewGetUserHandler(userRepo),
 			identityqueries.NewGetMerchantHandler(merchantRepo),
-			identitycommands.NewLoginHandler(adminRepo, hasher, tokens),
-			identityqueries.NewGetCurrentUserHandler(adminRepo),
+			identitycommands.NewLoginHandler(adminRepo, hasher, tokens, identitydomain.RoleAdmin),
+			identitycommands.NewLoginHandler(merchantRepo, hasher, tokens, identitydomain.RoleMerchant),
+			identityqueries.NewGetCurrentUserHandler(adminRepo, identitydomain.RoleAdmin),
+			identityqueries.NewGetCurrentUserHandler(merchantRepo, identitydomain.RoleMerchant),
 			identitycommands.NewCreateUserHandler(userRepo, hasher),
 			identitycommands.NewUpdateUserHandler(userRepo, hasher),
 			identitycommands.NewDeleteUserHandler(userRepo),

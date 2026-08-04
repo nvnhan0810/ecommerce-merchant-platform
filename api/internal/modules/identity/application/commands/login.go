@@ -24,22 +24,25 @@ type UserDTO struct {
 	Role        string `json:"role"`
 }
 
+// LoginHandler authenticates against a single account portal (admin or merchant).
 type LoginHandler struct {
-	admins domain.AccountRepository
-	hasher domain.PasswordHasher
-	tokens domain.TokenService
+	accounts domain.AccountRepository
+	hasher   domain.PasswordHasher
+	tokens   domain.TokenService
+	role     domain.Role
 }
 
 func NewLoginHandler(
-	admins domain.AccountRepository,
+	accounts domain.AccountRepository,
 	hasher domain.PasswordHasher,
 	tokens domain.TokenService,
+	role domain.Role,
 ) *LoginHandler {
-	return &LoginHandler{admins: admins, hasher: hasher, tokens: tokens}
+	return &LoginHandler{accounts: accounts, hasher: hasher, tokens: tokens, role: role}
 }
 
 func (h *LoginHandler) Handle(_ context.Context, cmd LoginCommand) (LoginResult, error) {
-	account, err := h.admins.FindByEmail(cmd.Email)
+	account, err := h.accounts.FindByEmail(cmd.Email)
 	if err != nil {
 		if err == domain.ErrAccountNotFound {
 			return LoginResult{}, domain.ErrInvalidCredentials
@@ -52,7 +55,7 @@ func (h *LoginHandler) Handle(_ context.Context, cmd LoginCommand) (LoginResult,
 	token, err := h.tokens.Issue(domain.TokenClaims{
 		UserID: account.ID,
 		Email:  account.Email,
-		Role:   domain.RoleAdmin,
+		Role:   h.role,
 	})
 	if err != nil {
 		return LoginResult{}, err
@@ -64,7 +67,7 @@ func (h *LoginHandler) Handle(_ context.Context, cmd LoginCommand) (LoginResult,
 			ID:          string(account.ID),
 			Email:       account.Email,
 			DisplayName: account.DisplayName,
-			Role:        string(domain.RoleAdmin),
+			Role:        string(h.role),
 		},
 	}, nil
 }

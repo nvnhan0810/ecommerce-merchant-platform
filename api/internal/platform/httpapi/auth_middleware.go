@@ -39,6 +39,17 @@ func RequireAdmin(next http.Handler) http.Handler {
 	})
 }
 
+func RequireMerchant(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := authctx.FromContext(r.Context())
+		if !ok || claims.Role != domain.RoleMerchant {
+			writeAuthError(w, http.StatusForbidden, "merchant role required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func writeAuthError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

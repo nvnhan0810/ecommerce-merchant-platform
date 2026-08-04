@@ -46,6 +46,13 @@ func NewRouter(deps Dependencies) http.Handler {
 		api.Get("/media/*", deps.Catalog.ServeMedia)
 
 		api.Post("/auth/login", deps.Identity.Login)
+		api.Post("/auth/merchant/login", deps.Identity.MerchantLogin)
+
+		api.Group(func(merchant chi.Router) {
+			merchant.Use(BearerAuth(deps.Tokens))
+			merchant.Use(RequireMerchant)
+			merchant.Get("/auth/merchant/me", deps.Identity.MerchantMe)
+		})
 
 		api.Group(func(admin chi.Router) {
 			admin.Use(BearerAuth(deps.Tokens))
