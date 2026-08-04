@@ -64,6 +64,27 @@
   line-height: 1.5;
 }
 
+.actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 1.5rem;
+}
+
+.quantityInput {
+  width: 80px;
+  padding: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.quantityInput:focus {
+  outline: none;
+  border-color: #0f766e;
+}
+
 @media (max-width: 800px) {
   .layout {
     grid-template-columns: 1fr;

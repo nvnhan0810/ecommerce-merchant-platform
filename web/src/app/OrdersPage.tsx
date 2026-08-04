@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/modules/auth/presentation/AuthProvider'
 import { ListMyOrdersUseCase } from '@/modules/orders/application/order-use-cases'
 import { HttpOrderRepository } from '@/modules/orders/infrastructure/http-order-repository'
+import { OrderStatusBadge } from './OrderStatusBadge'
 import styles from './OrdersPage.module.css'
 
 const listOrders = new ListMyOrdersUseCase(new HttpOrderRepository())
@@ -45,9 +46,14 @@ export function OrdersPage(): JSX.Element {
           {data.map((order) => (
             <li key={order.id}>
               <Link to={`/orders/${order.id}`} className={styles.item}>
-                <strong className={styles.code}>{order.code}</strong>
-                <span>{order.statusLabel}</span>
-                <span>{formatMoney(order.totalCents, order.currency)}</span>
+                <div>
+                  <strong className={styles.code}>{order.code}</strong>
+                  <div className={styles.meta}>
+                    <OrderStatusBadge status={order.status} label={order.statusLabel} />
+                    <span>· {formatMoney(order.totalCents, order.currency)}</span>
+                  </div>
+                </div>
+                <span className={styles.viewBtn}>Xem chi tiết</span>
               </Link>
             </li>
           ))}
