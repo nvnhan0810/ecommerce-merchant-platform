@@ -35,6 +35,7 @@ type ObjectStore interface {
 	Download(ctx context.Context, key string) (body io.ReadCloser, contentType string, err error)
 	Delete(ctx context.Context, key string) error
 	NewProductImageKey(merchantID, productID, filename string) string
+	NewMerchantAvatarKey(merchantID, filename string) string
 }
 
 type S3Store struct {
@@ -149,6 +150,20 @@ func (s *S3Store) NewProductImageKey(merchantID, productID, filename string) str
 	return fmt.Sprintf("shops/%s/products/%s/%s%s", merchantID, productID, uuid.NewString(), ext)
 }
 
+func (s *S3Store) NewMerchantAvatarKey(merchantID, filename string) string {
+	ext := strings.ToLower(path.Ext(filename))
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".webp", ".gif":
+	default:
+		ext = ".jpg"
+	}
+	merchantID = strings.TrimSpace(merchantID)
+	if merchantID == "" {
+		merchantID = "unknown"
+	}
+	return fmt.Sprintf("shops/%s/avatar/%s%s", merchantID, uuid.NewString(), ext)
+}
+
 type cancelCloser struct {
 	io.ReadCloser
 	cancel context.CancelFunc
@@ -173,4 +188,7 @@ func (NopStore) Download(context.Context, string) (io.ReadCloser, string, error)
 func (NopStore) Delete(context.Context, string) error { return ErrObjectStoreDisabled }
 func (NopStore) NewProductImageKey(merchantID, productID, filename string) string {
 	return fmt.Sprintf("shops/%s/products/%s/%s", merchantID, productID, filename)
+}
+func (NopStore) NewMerchantAvatarKey(merchantID, filename string) string {
+	return fmt.Sprintf("shops/%s/avatar/%s", merchantID, filename)
 }

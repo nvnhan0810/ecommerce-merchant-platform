@@ -3,11 +3,14 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { GetProductUseCase } from '@/modules/catalog/application/list-products'
 import { HttpProductRepository } from '@/modules/catalog/infrastructure/http-product-repository'
+import { GetMerchantUseCase } from '@/modules/merchants/application/merchant-use-cases'
+import { HttpMerchantRepository } from '@/modules/merchants/infrastructure/http-merchant-repository'
 import { CartItem } from '@/modules/cart/domain/cart'
 import { useCart } from '@/modules/cart/presentation/CartProvider'
 import styles from './ProductDetailPage.module.css'
 
 const getProduct = new GetProductUseCase(new HttpProductRepository())
+const getMerchant = new GetMerchantUseCase(new HttpMerchantRepository())
 
 export function ProductDetailPage(): JSX.Element {
   const { id = '' } = useParams()
@@ -17,6 +20,15 @@ export function ProductDetailPage(): JSX.Element {
     queryKey: ['catalog', 'products', id],
     queryFn: () => getProduct.execute(id),
     enabled: Boolean(id),
+  })
+  const merchantId = data?.merchantId ?? ''
+  const {
+    data: merchant,
+    isLoading: merchantLoading,
+  } = useQuery({
+    queryKey: ['merchants', merchantId],
+    queryFn: () => getMerchant.execute(merchantId),
+    enabled: Boolean(merchantId),
   })
 
   if (isLoading) return <p>Đang tải…</p>
@@ -81,6 +93,35 @@ export function ProductDetailPage(): JSX.Element {
           </div>
         </div>
       </div>
+
+      {merchantLoading ? (
+        <section className={styles.shopSection} aria-busy="true">
+          <p className={styles.merchant}>Đang tải gian hàng…</p>
+        </section>
+      ) : merchant ? (
+        <section className={styles.shopSection} aria-label="Thông tin gian hàng">
+          <div className={styles.merchantCard}>
+            <div className={styles.merchantAvatar} aria-hidden="true">
+              {merchant.avatarUrl ? (
+                <img src={merchant.avatarUrl} alt="" />
+              ) : (
+                <span>{merchant.displayName.charAt(0)}</span>
+              )}
+            </div>
+            <div className={styles.merchantInfo}>
+              <p className={styles.merchantName}>{merchant.displayName}</p>
+              {merchant.wardName || merchant.provinceName ? (
+                <p className={styles.merchantAddress}>
+                  {[merchant.wardName, merchant.provinceName].filter(Boolean).join(', ')}
+                </p>
+              ) : null}
+            </div>
+            <Link className={styles.viewShop} to={`/merchants/${merchant.id}`}>
+              Xem
+            </Link>
+          </div>
+        </section>
+      ) : null}
     </article>
   )
 }

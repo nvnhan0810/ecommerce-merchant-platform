@@ -3,8 +3,8 @@ import type { Product, ProductRepository } from '../domain/product'
 export class ListProductsUseCase {
   constructor(private readonly repo: ProductRepository) {}
 
-  execute(limit?: number): Promise<Product[]> {
-    return this.repo.list(limit)
+  execute(limit?: number, merchantId?: string): Promise<Product[]> {
+    return this.repo.list(limit, merchantId)
   }
 }
 

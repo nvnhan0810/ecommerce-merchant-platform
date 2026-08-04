@@ -111,6 +111,17 @@ func (r *InMemoryGeoRepository) DefaultCountry() (domain.Country, error) {
 	return domain.Country{}, domain.ErrCountryNotFound
 }
 
+func (r *InMemoryGeoRepository) GetCountry(code string) (domain.Country, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, c := range r.countries {
+		if c.Code == code {
+			return c, nil
+		}
+	}
+	return domain.Country{}, domain.ErrCountryNotFound
+}
+
 func (r *InMemoryGeoRepository) ListProvinces(countryCode string) ([]domain.Province, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

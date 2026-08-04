@@ -34,6 +34,9 @@ export class Product {
     readonly stock: number,
     readonly merchantId: string,
     readonly imageUrl: string = '',
+    readonly merchantDisplayName: string = '',
+    readonly merchantAvatarUrl: string = '',
+    readonly merchantProvinceName: string = '',
   ) {}
 
   get isAvailable(): boolean {
@@ -42,6 +45,6 @@ export class Product {
 }
 
 export interface ProductRepository {
-  list(limit?: number): Promise<Product[]>
+  list(limit?: number, merchantId?: string): Promise<Product[]>
   getById(id: string): Promise<Product>
 }

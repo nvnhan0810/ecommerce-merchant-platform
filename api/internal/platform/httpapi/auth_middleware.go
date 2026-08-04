@@ -28,6 +28,22 @@ func BearerAuth(tokens domain.TokenService) func(http.Handler) http.Handler {
 	}
 }
 
+// OptionalBearerAuth attaches claims when a valid bearer token is present; otherwise continues unauthenticated.
+func OptionalBearerAuth(tokens domain.TokenService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			header := r.Header.Get("Authorization")
+			if header != "" && strings.HasPrefix(strings.ToLower(header), "bearer ") {
+				raw := strings.TrimSpace(header[7:])
+				if claims, err := tokens.Parse(raw); err == nil {
+					r = r.WithContext(authctx.WithClaims(r.Context(), claims))
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := authctx.FromContext(r.Context())

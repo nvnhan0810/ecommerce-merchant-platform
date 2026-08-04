@@ -68,9 +68,9 @@ func main() {
 		}
 	}
 
-	listProducts := queries.NewListProductsHandler(productRepo, cfg.PublicAPIBase)
+	listProducts := queries.NewListProductsHandler(productRepo, merchantRepo, geoRepo, cfg.PublicAPIBase)
 	merchantChecker := cataloginfra.NewAccountMerchantChecker(merchantRepo)
-	getProduct := queries.NewGetProductHandler(productRepo, cfg.PublicAPIBase)
+	getProduct := queries.NewGetProductHandler(productRepo, merchantRepo, geoRepo, cfg.PublicAPIBase)
 	createProduct := commands.NewCreateProductHandler(productRepo, merchantChecker, cfg.PublicAPIBase)
 	updateProduct := commands.NewUpdateProductHandler(productRepo, merchantChecker, cfg.PublicAPIBase)
 
@@ -94,21 +94,23 @@ func main() {
 		),
 		Identity: identitypres.NewIdentityHandler(
 			identityqueries.NewListUsersHandler(userRepo),
-			identityqueries.NewListMerchantsHandler(merchantRepo),
+			identityqueries.NewListMerchantsHandler(merchantRepo, cfg.PublicAPIBase, geoRepo),
 			identityqueries.NewGetUserHandler(userRepo),
-			identityqueries.NewGetMerchantHandler(merchantRepo),
+			identityqueries.NewGetMerchantHandler(merchantRepo, cfg.PublicAPIBase, geoRepo),
 			identitycommands.NewLoginHandler(adminRepo, hasher, tokens, identitydomain.RoleAdmin),
 			identitycommands.NewLoginHandler(merchantRepo, hasher, tokens, identitydomain.RoleMerchant),
 			identitycommands.NewLoginHandler(userRepo, hasher, tokens, identitydomain.RoleUser),
 			identityqueries.NewGetCurrentUserHandler(adminRepo, identitydomain.RoleAdmin),
-			identityqueries.NewGetCurrentUserHandler(merchantRepo, identitydomain.RoleMerchant),
+			identityqueries.NewGetCurrentMerchantHandler(merchantRepo, cfg.PublicAPIBase, geoRepo),
 			identityqueries.NewGetCurrentUserHandler(userRepo, identitydomain.RoleUser),
 			identitycommands.NewCreateUserHandler(userRepo, hasher),
 			identitycommands.NewUpdateUserHandler(userRepo, hasher),
 			identitycommands.NewDeleteUserHandler(userRepo),
-			identitycommands.NewCreateMerchantHandler(merchantRepo, hasher),
-			identitycommands.NewUpdateMerchantHandler(merchantRepo, hasher),
+			identitycommands.NewCreateMerchantHandler(merchantRepo, hasher, geoRepo, cfg.PublicAPIBase),
+			identitycommands.NewUpdateMerchantHandler(merchantRepo, hasher, geoRepo, cfg.PublicAPIBase),
 			identitycommands.NewDeleteMerchantHandler(merchantRepo),
+			identitycommands.NewUploadMerchantAvatarHandler(merchantRepo, objectStore, cfg.PublicAPIBase, geoRepo),
+			identitycommands.NewDeleteMerchantAvatarHandler(merchantRepo, objectStore, cfg.PublicAPIBase, geoRepo),
 			identityqueries.NewListUserAddressesHandler(addressRepo),
 			identityqueries.NewGetUserAddressHandler(addressRepo),
 			identitycommands.NewCreateUserAddressHandler(addressRepo, geoRepo),

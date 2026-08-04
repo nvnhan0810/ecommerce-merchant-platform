@@ -20,6 +20,7 @@ function logout(): void {
       <RouterLink class="brand" to="/">Ecomerce Merchant</RouterLink>
       <nav aria-label="Merchant">
         <RouterLink to="/">Dashboard</RouterLink>
+        <RouterLink to="/profile">Gian hàng</RouterLink>
         <RouterLink to="/products">Sản phẩm</RouterLink>
         <RouterLink to="/orders">Đơn hàng</RouterLink>
       </nav>

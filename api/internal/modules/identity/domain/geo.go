@@ -37,6 +37,7 @@ type Ward struct {
 type GeoRepository interface {
 	ListCountries() ([]Country, error)
 	DefaultCountry() (Country, error)
+	GetCountry(code string) (Country, error)
 	ListProvinces(countryCode string) ([]Province, error)
 	ListWards(provinceCode string) ([]Ward, error)
 	GetProvince(code string) (Province, error)

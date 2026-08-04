@@ -47,7 +47,11 @@ func NewCatalogHandler(
 func (h *CatalogHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	items, err := h.list.Handle(r.Context(), queries.ListProductsQuery{Limit: limit, Offset: offset})
+	items, err := h.list.Handle(r.Context(), queries.ListProductsQuery{
+		Limit:      limit,
+		Offset:     offset,
+		MerchantID: strings.TrimSpace(r.URL.Query().Get("merchant_id")),
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

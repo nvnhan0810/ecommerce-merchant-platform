@@ -61,6 +61,21 @@ func (r *GeoRepository) DefaultCountry() (domain.Country, error) {
 	return c, err
 }
 
+func (r *GeoRepository) GetCountry(code string) (domain.Country, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var c domain.Country
+	err := r.pool.QueryRow(ctx, `
+		SELECT code, name, name_en, is_default
+		FROM countries WHERE code = $1
+	`, code).Scan(&c.Code, &c.Name, &c.NameEn, &c.IsDefault)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Country{}, domain.ErrCountryNotFound
+	}
+	return c, err
+}
+
 func (r *GeoRepository) ListProvinces(countryCode string) ([]domain.Province, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

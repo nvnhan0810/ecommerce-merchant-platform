@@ -2,6 +2,9 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AppShell from '@/app/AppShell.vue'
 import OverviewPanel from '@/modules/dashboard/presentation/OverviewPanel.vue'
 import MerchantList from '@/modules/merchants/presentation/MerchantList.vue'
+import MerchantCreate from '@/modules/merchants/presentation/MerchantCreate.vue'
+import MerchantEdit from '@/modules/merchants/presentation/MerchantEdit.vue'
+import MerchantShow from '@/modules/merchants/presentation/MerchantShow.vue'
 import UserList from '@/modules/users/presentation/UserList.vue'
 import ProductList from '@/modules/products/presentation/ProductList.vue'
 import ProductCreate from '@/modules/products/presentation/ProductCreate.vue'
@@ -32,6 +35,9 @@ export const router = createRouter({
         { path: '', component: OverviewPanel },
         { path: 'users', component: UserList },
         { path: 'merchants', component: MerchantList },
+        { path: 'merchants/new', component: MerchantCreate },
+        { path: 'merchants/:id/edit', component: MerchantEdit },
+        { path: 'merchants/:id', component: MerchantShow },
         { path: 'products', component: ProductList },
         { path: 'products/new', component: ProductCreate },
         { path: 'products/:id/edit', component: ProductEdit },

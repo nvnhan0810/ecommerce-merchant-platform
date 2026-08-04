@@ -16,6 +16,7 @@ var (
 	ErrWeakPassword       = errors.New("password must be at least 8 characters")
 	ErrEmailTaken         = errors.New("email is already taken")
 	ErrInvalidAccountID   = errors.New("account id is required")
+	ErrInvalidAvatar      = errors.New("avatar must be jpeg, png, webp, or gif and at most 5MB")
 )
 
 // Role is used only in JWT claims / API responses — not stored on account tables.
@@ -56,12 +57,18 @@ type PasswordHasher interface {
 }
 
 // Account is the shared shape for rows in users / merchants / admins tables.
+// Avatar and shop address fields apply to merchants only (empty for users/admins).
 type Account struct {
 	ID           AccountID
 	Email        string
 	DisplayName  string
 	PasswordHash string
 	CreatedAt    time.Time
+	AvatarKey    string
+	AddressLine  string
+	CountryCode  string
+	ProvinceCode string
+	WardCode     string
 }
 
 func NewAccount(email, displayName string) (Account, error) {
@@ -110,6 +117,29 @@ func (a *Account) ChangeEmail(email string) error {
 	}
 	a.Email = email
 	return nil
+}
+
+func (a *Account) SetAvatarKey(key string) {
+	a.AvatarKey = strings.TrimSpace(strings.TrimPrefix(key, "/"))
+}
+
+func (a *Account) ClearShopAddress() {
+	a.AddressLine = ""
+	a.CountryCode = ""
+	a.ProvinceCode = ""
+	a.WardCode = ""
+}
+
+func (a *Account) SetShopAddress(addressLine, countryCode, provinceCode, wardCode string) {
+	a.AddressLine = strings.TrimSpace(addressLine)
+	a.CountryCode = strings.ToUpper(strings.TrimSpace(countryCode))
+	a.ProvinceCode = strings.TrimSpace(provinceCode)
+	a.WardCode = strings.TrimSpace(wardCode)
+}
+
+// ShopAddressProvided reports whether any shop address field is set.
+func (a Account) ShopAddressProvided() bool {
+	return a.AddressLine != "" || a.CountryCode != "" || a.ProvinceCode != "" || a.WardCode != ""
 }
 
 type AccountRepository interface {
