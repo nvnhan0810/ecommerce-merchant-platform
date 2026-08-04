@@ -28,9 +28,28 @@
   display: flex;
   gap: 1rem;
   justify-content: space-between;
-  flex-wrap: wrap;
+  align-items: center;
   text-decoration: none;
   color: inherit;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.viewBtn {
+  color: #0f766e;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.item:hover .viewBtn {
+  text-decoration: underline;
 }
 
 .code {

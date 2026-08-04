@@ -14,13 +14,25 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.5rem;
   border-bottom: 1px solid #e2e8f0;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(8px);
   position: sticky;
   top: 0;
   z-index: 10;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
 }
 
 .brand {
@@ -31,26 +43,159 @@
   text-decoration: none;
 }
 
-.nav {
+.mainNav {
   display: flex;
   gap: 1rem;
 }
 
-.nav a,
-.linkBtn {
+.mainNav a {
   color: #334155;
   text-decoration: none;
   font-weight: 500;
-  background: none;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  cursor: pointer;
+  font-size: 0.95rem;
 }
 
-.nav a:hover,
-.linkBtn:hover {
+.mainNav a:hover {
   color: #0f766e;
+}
+
+.cartBtn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #334155;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.cartBtn:hover {
+  background-color: #f1f5f9;
+  color: #0f766e;
+}
+
+.cartBadge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: #ef4444;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid #fff;
+}
+
+.loginBtn {
+  color: #fff;
+  background: #0f766e;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.loginBtn:hover {
+  background: #0d655e;
+}
+
+.userMenuWrapper {
+  position: relative;
+}
+
+.userMenuBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  padding: 0.35rem 0.5rem 0.35rem 0.35rem;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font: inherit;
+}
+
+.userMenuBtn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #e2e8f0;
+  color: #475569;
+  border-radius: 50%;
+}
+
+.userName {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #334155;
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chevron {
+  color: #64748b;
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  min-width: 200px;
+  padding: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  color: #334155;
+  text-decoration: none;
+  font-size: 0.9rem;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dropdownItem:hover {
+  background: #f8fafc;
+  color: #0f766e;
+}
+
+.dropdownDivider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 0.25rem 0;
 }
 
 .main {

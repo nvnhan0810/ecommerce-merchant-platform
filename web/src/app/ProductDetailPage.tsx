@@ -1,4 +1,4 @@
-import type { JSX } from 'react'
+import { useState, type JSX } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { GetProductUseCase } from '@/modules/catalog/application/list-products'
@@ -12,6 +12,7 @@ const getProduct = new GetProductUseCase(new HttpProductRepository())
 export function ProductDetailPage(): JSX.Element {
   const { id = '' } = useParams()
   const { addItem } = useCart()
+  const [quantity, setQuantity] = useState(1)
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['catalog', 'products', id],
     queryFn: () => getProduct.execute(id),
@@ -40,7 +41,7 @@ export function ProductDetailPage(): JSX.Element {
         data.name,
         data.price.amountCents,
         data.price.currency,
-        1,
+        quantity,
         data.imageUrl,
       ),
     )
@@ -64,9 +65,20 @@ export function ProductDetailPage(): JSX.Element {
             {data.isAvailable ? `Còn ${data.stock} sản phẩm` : 'Hết hàng'}
           </p>
           <p className={styles.desc}>{data.description || '—'}</p>
-          <button type="button" disabled={!data.isAvailable} onClick={onAdd}>
-            Thêm vào giỏ
-          </button>
+          <div className={styles.actions}>
+            <input
+              type="number"
+              min="1"
+              max={data.stock}
+              value={quantity}
+              onChange={(e) => setQuantity(Math.max(1, Math.min(data.stock, Number(e.target.value))))}
+              disabled={!data.isAvailable}
+              className={styles.quantityInput}
+            />
+            <button type="button" disabled={!data.isAvailable} onClick={onAdd}>
+              Thêm vào giỏ
+            </button>
+          </div>
         </div>
       </div>
     </article>
