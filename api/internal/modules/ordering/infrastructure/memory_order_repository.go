@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/domain"
@@ -27,6 +28,10 @@ func (r *InMemoryOrderRepository) Save(order domain.Order) error {
 	}
 	stored := order
 	stored.ClearPendingEvents()
+	stored.ClearPendingDeliveryEvents()
+	if strings.TrimSpace(stored.DeliveryCarrier) == "" {
+		stored.DeliveryCarrier = domain.DefaultDeliveryCarrier
+	}
 	r.items[order.ID] = stored
 	return nil
 }
@@ -55,6 +60,40 @@ func (r *InMemoryOrderRepository) FindByCode(code string) (domain.Order, error) 
 		}
 	}
 	return domain.Order{}, domain.ErrOrderNotFound
+}
+
+func (r *InMemoryOrderRepository) FindByDeliveryTrackingCode(code string) (domain.Order, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return domain.Order{}, domain.ErrOrderNotFound
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, id := range r.order {
+		o := r.items[id]
+		if o.DeliveryTrackingCode == code {
+			return cloneOrder(o), nil
+		}
+	}
+	return domain.Order{}, domain.ErrOrderNotFound
+}
+
+func (r *InMemoryOrderRepository) HasDeliveryEventID(eventID string) (bool, error) {
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" {
+		return false, nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, id := range r.order {
+		o := r.items[id]
+		for _, ev := range o.DeliveryEvents {
+			if ev.EventID == eventID {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func (r *InMemoryOrderRepository) List(limit, offset int) ([]domain.Order, error) {
@@ -124,6 +163,8 @@ func cloneOrder(o domain.Order) domain.Order {
 	cp := o
 	cp.Items = append([]domain.OrderItem(nil), o.Items...)
 	cp.History = append([]domain.OrderEvent(nil), o.History...)
+	cp.DeliveryEvents = append([]domain.DeliveryEvent(nil), o.DeliveryEvents...)
 	cp.ClearPendingEvents()
+	cp.ClearPendingDeliveryEvents()
 	return cp
 }

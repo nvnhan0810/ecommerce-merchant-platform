@@ -63,6 +63,7 @@ const merchantLabel = computed(() => {
 })
 
 const history = computed(() => order.value?.history ?? [])
+const deliveryEvents = computed(() => order.value?.deliveryEvents ?? [])
 
 function formatMoney(cents: number, currency: string): string {
   return `${cents.toLocaleString('vi-VN')} ${currency}`
@@ -123,6 +124,14 @@ async function onSaveStatus(): Promise<void> {
           <dd class="code">{{ order.code }}</dd>
         </div>
         <div>
+          <dt>Mã vận đơn</dt>
+          <dd class="code">{{ order.deliveryTrackingCode || '—' }}</dd>
+        </div>
+        <div>
+          <dt>Đơn vị vận chuyển</dt>
+          <dd>{{ order.deliveryCarrier || 'internal' }}</dd>
+        </div>
+        <div>
           <dt>Trạng thái</dt>
           <dd><OrderStatusBadge :status="order.status" :label="order.statusLabel" /></dd>
         </div>
@@ -164,6 +173,9 @@ async function onSaveStatus(): Promise<void> {
         <button type="submit" class="primary" :disabled="statusMutation.isPending.value">
           Lưu trạng thái
         </button>
+        <RouterLink class="ghost" :to="`/delivery-simulator?orderId=${order.id}`">
+          Mô phỏng TMS
+        </RouterLink>
         <p v-if="statusMessage" class="hint">{{ statusMessage }}</p>
       </form>
 
@@ -187,6 +199,27 @@ async function onSaveStatus(): Promise<void> {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div class="history">
+        <h2>Timeline TMS</h2>
+        <ol v-if="deliveryEvents.length" class="timeline">
+          <li v-for="ev in deliveryEvents" :key="ev.id" class="event--delivery">
+            <div class="dot" aria-hidden="true" />
+            <div class="event-body">
+              <div class="event-top">
+                <strong>{{ ev.statusLabel || ev.statusCode }}</strong>
+                <time>{{ formatDate(ev.occurredAt) }}</time>
+              </div>
+              <p class="event-msg">{{ ev.message }}</p>
+              <p v-if="ev.reason" class="event-actor">Lý do: {{ ev.reason }}</p>
+              <p class="event-actor">
+                {{ ev.deliveryTrackingCode || '—' }} · {{ ev.source || 'tms' }}
+              </p>
+            </div>
+          </li>
+        </ol>
+        <p v-else class="empty-history">Chưa có sự kiện vận chuyển.</p>
       </div>
 
       <div class="history">
@@ -406,6 +439,11 @@ th {
 .event--cancelled .dot {
   background: #64748b;
   box-shadow: 0 0 0 1px #cbd5e1;
+}
+
+.event--delivery .dot {
+  background: #ea580c;
+  box-shadow: 0 0 0 1px #fdba74;
 }
 
 .event-body {

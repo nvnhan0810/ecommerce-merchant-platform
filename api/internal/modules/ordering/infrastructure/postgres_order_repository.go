@@ -2,8 +2,10 @@ package infrastructure
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -29,9 +31,21 @@ func (r *PostgresOrderRepository) Save(order domain.Order) error {
 	}
 	defer tx.Rollback(ctx)
 
+	var tracking any
+	if strings.TrimSpace(order.DeliveryTrackingCode) != "" {
+		tracking = order.DeliveryTrackingCode
+	}
+	carrier := order.DeliveryCarrier
+	if strings.TrimSpace(carrier) == "" {
+		carrier = domain.DefaultDeliveryCarrier
+	}
+
 	_, err = tx.Exec(ctx, `
-		INSERT INTO orders (id, code, user_id, merchant_id, status, currency, total_cents, note, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO orders (
+			id, code, user_id, merchant_id, status, currency, total_cents, note,
+			delivery_tracking_code, delivery_carrier, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (id) DO UPDATE SET
 			code = EXCLUDED.code,
 			user_id = EXCLUDED.user_id,
@@ -40,9 +54,11 @@ func (r *PostgresOrderRepository) Save(order domain.Order) error {
 			currency = EXCLUDED.currency,
 			total_cents = EXCLUDED.total_cents,
 			note = EXCLUDED.note,
+			delivery_tracking_code = EXCLUDED.delivery_tracking_code,
+			delivery_carrier = EXCLUDED.delivery_carrier,
 			updated_at = EXCLUDED.updated_at
 	`, order.ID, order.Code, order.UserID, order.MerchantID, order.Status, order.Currency,
-		order.TotalCents, order.Note, order.CreatedAt, order.UpdatedAt)
+		order.TotalCents, order.Note, tracking, carrier, order.CreatedAt, order.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -82,6 +98,23 @@ func (r *PostgresOrderRepository) Save(order domain.Order) error {
 			return err
 		}
 	}
+
+	for _, ev := range order.PendingDeliveryEvents() {
+		raw := ev.RawPayload
+		if len(raw) == 0 {
+			raw = json.RawMessage(`{}`)
+		}
+		_, err := tx.Exec(ctx, `
+			INSERT INTO delivery_events (
+				id, order_id, event_id, delivery_tracking_code, status_code, status_label,
+				message, reason, occurred_at, source, raw_payload, created_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		`, ev.ID, order.ID, ev.EventID, ev.DeliveryTrackingCode, string(ev.StatusCode), ev.StatusLabel,
+			ev.Message, ev.Reason, ev.OccurredAt, ev.Source, raw, ev.CreatedAt)
+		if err != nil {
+			return err
+		}
+	}
 	return tx.Commit(ctx)
 }
 
@@ -90,24 +123,11 @@ func (r *PostgresOrderRepository) FindByID(id domain.OrderID) (domain.Order, err
 	defer cancel()
 
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note, created_at, updated_at
+		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+		       delivery_tracking_code, delivery_carrier, created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id)
-	order, err := scanOrder(row)
-	if err != nil {
-		return domain.Order{}, err
-	}
-	items, err := r.loadItems(ctx, order.ID)
-	if err != nil {
-		return domain.Order{}, err
-	}
-	order.Items = items
-	history, err := r.loadEvents(ctx, order.ID)
-	if err != nil {
-		return domain.Order{}, err
-	}
-	order.History = history
-	return order, nil
+	return r.hydrate(ctx, row)
 }
 
 func (r *PostgresOrderRepository) FindByCode(code string) (domain.Order, error) {
@@ -119,9 +139,42 @@ func (r *PostgresOrderRepository) FindByCode(code string) (domain.Order, error) 
 	defer cancel()
 
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note, created_at, updated_at
+		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+		       delivery_tracking_code, delivery_carrier, created_at, updated_at
 		FROM orders WHERE code = $1
 	`, parsed)
+	return r.hydrate(ctx, row)
+}
+
+func (r *PostgresOrderRepository) FindByDeliveryTrackingCode(code string) (domain.Order, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return domain.Order{}, domain.ErrOrderNotFound
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	row := r.pool.QueryRow(ctx, `
+		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+		       delivery_tracking_code, delivery_carrier, created_at, updated_at
+		FROM orders WHERE delivery_tracking_code = $1
+	`, code)
+	return r.hydrate(ctx, row)
+}
+
+func (r *PostgresOrderRepository) HasDeliveryEventID(eventID string) (bool, error) {
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" {
+		return false, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var n int
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM delivery_events WHERE event_id = $1`, eventID).Scan(&n)
+	return n > 0, err
+}
+
+func (r *PostgresOrderRepository) hydrate(ctx context.Context, row scannable) (domain.Order, error) {
 	order, err := scanOrder(row)
 	if err != nil {
 		return domain.Order{}, err
@@ -136,6 +189,11 @@ func (r *PostgresOrderRepository) FindByCode(code string) (domain.Order, error) 
 		return domain.Order{}, err
 	}
 	order.History = history
+	deliveryEvents, err := r.loadDeliveryEvents(ctx, order.ID)
+	if err != nil {
+		return domain.Order{}, err
+	}
+	order.DeliveryEvents = deliveryEvents
 	return order, nil
 }
 
@@ -146,7 +204,8 @@ func (r *PostgresOrderRepository) List(limit, offset int) ([]domain.Order, error
 		limit = 50
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note, created_at, updated_at
+		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+		       delivery_tracking_code, delivery_carrier, created_at, updated_at
 		FROM orders
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -155,21 +214,7 @@ func (r *PostgresOrderRepository) List(limit, offset int) ([]domain.Order, error
 		return nil, err
 	}
 	defer rows.Close()
-
-	out := make([]domain.Order, 0)
-	for rows.Next() {
-		o, err := scanOrder(rows)
-		if err != nil {
-			return nil, err
-		}
-		items, err := r.loadItems(ctx, o.ID)
-		if err != nil {
-			return nil, err
-		}
-		o.Items = items
-		out = append(out, o)
-	}
-	return out, rows.Err()
+	return r.scanList(ctx, rows)
 }
 
 func (r *PostgresOrderRepository) ListByMerchant(merchantID string, limit, offset int) ([]domain.Order, error) {
@@ -179,7 +224,8 @@ func (r *PostgresOrderRepository) ListByMerchant(merchantID string, limit, offse
 		limit = 50
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note, created_at, updated_at
+		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+		       delivery_tracking_code, delivery_carrier, created_at, updated_at
 		FROM orders
 		WHERE merchant_id = $1
 		ORDER BY created_at DESC
@@ -189,21 +235,7 @@ func (r *PostgresOrderRepository) ListByMerchant(merchantID string, limit, offse
 		return nil, err
 	}
 	defer rows.Close()
-
-	out := make([]domain.Order, 0)
-	for rows.Next() {
-		o, err := scanOrder(rows)
-		if err != nil {
-			return nil, err
-		}
-		items, err := r.loadItems(ctx, o.ID)
-		if err != nil {
-			return nil, err
-		}
-		o.Items = items
-		out = append(out, o)
-	}
-	return out, rows.Err()
+	return r.scanList(ctx, rows)
 }
 
 func (r *PostgresOrderRepository) ListByUser(userID string, limit, offset int) ([]domain.Order, error) {
@@ -213,7 +245,8 @@ func (r *PostgresOrderRepository) ListByUser(userID string, limit, offset int) (
 		limit = 50
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note, created_at, updated_at
+		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+		       delivery_tracking_code, delivery_carrier, created_at, updated_at
 		FROM orders
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -223,7 +256,10 @@ func (r *PostgresOrderRepository) ListByUser(userID string, limit, offset int) (
 		return nil, err
 	}
 	defer rows.Close()
+	return r.scanList(ctx, rows)
+}
 
+func (r *PostgresOrderRepository) scanList(ctx context.Context, rows pgx.Rows) ([]domain.Order, error) {
 	out := make([]domain.Order, 0)
 	for rows.Next() {
 		o, err := scanOrder(rows)
@@ -337,17 +373,69 @@ func (r *PostgresOrderRepository) loadEvents(ctx context.Context, orderID domain
 	return events, rows.Err()
 }
 
+func (r *PostgresOrderRepository) loadDeliveryEvents(ctx context.Context, orderID domain.OrderID) ([]domain.DeliveryEvent, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, order_id, event_id, delivery_tracking_code, status_code, status_label,
+		       message, reason, occurred_at, source, raw_payload, created_at
+		FROM delivery_events
+		WHERE order_id = $1
+		ORDER BY occurred_at ASC, created_at ASC, id ASC
+	`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]domain.DeliveryEvent, 0)
+	for rows.Next() {
+		var (
+			id, oid, eventID, tracking, statusCode, statusLabel string
+			message, reason, source                             string
+			raw                                                 []byte
+			occurredAt, createdAt                               time.Time
+		)
+		if err := rows.Scan(
+			&id, &oid, &eventID, &tracking, &statusCode, &statusLabel,
+			&message, &reason, &occurredAt, &source, &raw, &createdAt,
+		); err != nil {
+			return nil, err
+		}
+		if len(raw) == 0 {
+			raw = []byte(`{}`)
+		}
+		events = append(events, domain.DeliveryEvent{
+			ID:                   domain.DeliveryEventID(id),
+			OrderID:              domain.OrderID(oid),
+			EventID:              eventID,
+			DeliveryTrackingCode: tracking,
+			StatusCode:           domain.DeliveryStatusCode(statusCode),
+			StatusLabel:          statusLabel,
+			Message:              message,
+			Reason:               reason,
+			OccurredAt:           occurredAt.UTC(),
+			Source:               source,
+			RawPayload:           json.RawMessage(raw),
+			CreatedAt:            createdAt.UTC(),
+		})
+	}
+	return events, rows.Err()
+}
+
 type scannable interface {
 	Scan(dest ...any) error
 }
 
 func scanOrder(row scannable) (domain.Order, error) {
 	var (
-		id, code, userID, merchantID, status, currency, note string
-		total                                                int64
-		createdAt, updatedAt                                 time.Time
+		id, code, userID, merchantID, status, currency, note, carrier string
+		tracking                                                      *string
+		total                                                         int64
+		createdAt, updatedAt                                          time.Time
 	)
-	if err := row.Scan(&id, &code, &userID, &merchantID, &status, &currency, &total, &note, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(
+		&id, &code, &userID, &merchantID, &status, &currency, &total, &note,
+		&tracking, &carrier, &createdAt, &updatedAt,
+	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Order{}, domain.ErrOrderNotFound
 		}
@@ -357,16 +445,25 @@ func scanOrder(row scannable) (domain.Order, error) {
 	if err != nil {
 		return domain.Order{}, fmt.Errorf("invalid stored status: %w", err)
 	}
+	if carrier == "" {
+		carrier = domain.DefaultDeliveryCarrier
+	}
+	trackingCode := ""
+	if tracking != nil {
+		trackingCode = *tracking
+	}
 	return domain.Order{
-		ID:         domain.OrderID(id),
-		Code:       code,
-		UserID:     userID,
-		MerchantID: merchantID,
-		Status:     st,
-		Currency:   currency,
-		TotalCents: total,
-		Note:       note,
-		CreatedAt:  createdAt.UTC(),
-		UpdatedAt:  updatedAt.UTC(),
+		ID:                   domain.OrderID(id),
+		Code:                 code,
+		UserID:               userID,
+		MerchantID:           merchantID,
+		Status:               st,
+		Currency:             currency,
+		TotalCents:           total,
+		Note:                 note,
+		DeliveryTrackingCode: trackingCode,
+		DeliveryCarrier:      carrier,
+		CreatedAt:            createdAt.UTC(),
+		UpdatedAt:            updatedAt.UTC(),
 	}, nil
 }

@@ -1,4 +1,5 @@
 import {
+  DeliveryEvent,
   Order,
   OrderEvent,
   OrderItem,
@@ -34,6 +35,19 @@ type OrderEventApi = {
   created_at: string
 }
 
+type DeliveryEventApi = {
+  id: string
+  event_id?: string
+  delivery_tracking_code: string
+  status_code: string
+  status_label: string
+  message: string
+  reason?: string
+  occurred_at: string
+  source: string
+  created_at: string
+}
+
 type OrderApiItem = {
   id: string
   code: string
@@ -44,8 +58,11 @@ type OrderApiItem = {
   currency: string
   total_cents: number
   note: string
+  deliveryTrackingCode?: string
+  deliveryCarrier?: string
   items: OrderItemApi[]
   history?: OrderEventApi[]
+  delivery_events?: DeliveryEventApi[]
   created_at: string
   updated_at: string
 }
@@ -68,6 +85,21 @@ function mapEvent(item: OrderEventApi): OrderEvent {
   )
 }
 
+function mapDeliveryEvent(item: DeliveryEventApi): DeliveryEvent {
+  return new DeliveryEvent(
+    item.id,
+    item.event_id ?? '',
+    item.delivery_tracking_code ?? '',
+    item.status_code,
+    item.status_label,
+    item.message,
+    item.reason ?? '',
+    item.occurred_at,
+    item.source ?? '',
+    item.created_at,
+  )
+}
+
 function mapOrder(item: OrderApiItem): Order {
   return new Order(
     item.id,
@@ -79,6 +111,8 @@ function mapOrder(item: OrderApiItem): Order {
     item.currency,
     item.total_cents,
     item.note ?? '',
+    item.deliveryTrackingCode ?? '',
+    item.deliveryCarrier ?? 'internal',
     (item.items ?? []).map(
       (line) =>
         new OrderItem(
@@ -91,6 +125,7 @@ function mapOrder(item: OrderApiItem): Order {
         ),
     ),
     (item.history ?? []).map(mapEvent),
+    (item.delivery_events ?? []).map(mapDeliveryEvent),
     item.created_at,
     item.updated_at,
   )
@@ -134,10 +169,10 @@ export class HttpOrderRepository implements OrderRepository {
     return mapOrder(body.data)
   }
 
-  async updateStatus(id: string, status: OrderStatus): Promise<Order> {
+  async updateStatus(id: string, status: OrderStatus, reason = ''): Promise<Order> {
     const res = await apiFetch(`/api/v1/merchant/orders/${id}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, reason }),
     })
     if (!res.ok) {
       throw new Error(await readError(res))

@@ -113,6 +113,8 @@ func main() {
 			orderingqueries.NewGetOrderHandler(orderRepo),
 			orderingcommands.NewUpdateOrderStatusHandler(orderRepo),
 			orderingcommands.NewCreateOrderHandler(orderRepo, productRepo),
+			orderingcommands.NewApplyDeliveryEventHandler(orderRepo),
+			cfg.DeliveryWebhookSecret,
 		),
 		Tokens: tokens,
 	})

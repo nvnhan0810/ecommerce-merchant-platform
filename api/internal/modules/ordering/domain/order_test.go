@@ -1,11 +1,15 @@
 package domain
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseOrderStatus(t *testing.T) {
 	t.Parallel()
 	cases := []OrderStatus{
-		StatusNew, StatusPaid, StatusConfirmed, StatusShipping, StatusSucceeded, StatusFailed, StatusCancelled,
+		StatusNew, StatusPaid, StatusConfirmed, StatusShipping, StatusSucceeded,
+		StatusReturning, StatusReturned, StatusFailed, StatusCancelled,
 	}
 	for _, want := range cases {
 		got, err := ParseOrderStatus(string(want))
@@ -98,5 +102,180 @@ func TestNewOrder_ok(t *testing.T) {
 	}
 	if len(o.History) != 2 {
 		t.Fatalf("history=%d", len(o.History))
+	}
+}
+
+func TestMapDeliveryToOrderStatus(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		code   DeliveryStatusCode
+		status OrderStatus
+		change bool
+	}{
+		{DeliveryAccepted, StatusShipping, true},
+		{DeliveryDelivering, StatusShipping, false},
+		{DeliveryInTransit, StatusShipping, false},
+		{DeliveryFail, StatusShipping, false},
+		{DeliveryDelivered, StatusSucceeded, true},
+		{DeliveryReturning, StatusReturning, true},
+		{DeliveryReturned, StatusReturned, true},
+		{DeliveryReturnFail, StatusFailed, true},
+		{DeliveryLost, StatusFailed, true},
+		{DeliveryDamage, StatusFailed, true},
+	}
+	for _, tc := range cases {
+		got, change := MapDeliveryToOrderStatus(tc.code)
+		if got != tc.status || change != tc.change {
+			t.Fatalf("%s: got=%s change=%v want=%s/%v", tc.code, got, change, tc.status, tc.change)
+		}
+	}
+}
+
+func TestApplyDeliveryEvent_setsTrackingAndStatus(t *testing.T) {
+	t.Parallel()
+	o, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 1000, Quantity: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := o.ChangeStatus(StatusConfirmed, SystemActor()); err != nil {
+		t.Fatal(err)
+	}
+	ev, err := o.ApplyDeliveryEvent(ApplyDeliveryInput{
+		DeliveryTrackingCode: "GHN123",
+		DeliveryCarrier:      "ghn",
+		StatusCode:           DeliveryAccepted,
+		Message:              "Đã tiếp nhận",
+		Source:               "simulate",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.DeliveryTrackingCode != "GHN123" {
+		t.Fatalf("tracking=%q", o.DeliveryTrackingCode)
+	}
+	if o.DeliveryCarrier != "ghn" {
+		t.Fatalf("carrier=%q", o.DeliveryCarrier)
+	}
+	if o.Status != StatusShipping {
+		t.Fatalf("status=%s", o.Status)
+	}
+	if ev.StatusCode != DeliveryAccepted {
+		t.Fatalf("event status=%s", ev.StatusCode)
+	}
+	if len(o.PendingDeliveryEvents()) != 1 {
+		t.Fatalf("pending delivery=%d", len(o.PendingDeliveryEvents()))
+	}
+
+	_, err = o.ApplyDeliveryEvent(ApplyDeliveryInput{
+		StatusCode: DeliveryFail,
+		Message:    "Không liên lạc được",
+		Source:     "webhook",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Status != StatusShipping {
+		t.Fatalf("status after fail=%s", o.Status)
+	}
+
+	_, err = o.ApplyDeliveryEvent(ApplyDeliveryInput{
+		StatusCode: DeliveryDelivered,
+		Source:     "webhook",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Status != StatusSucceeded {
+		t.Fatalf("status after delivered=%s", o.Status)
+	}
+}
+
+func TestMerchantConfirm(t *testing.T) {
+	t.Parallel()
+	o, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 1000, Quantity: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := o.MerchantConfirm(Actor{Role: "merchant", Email: "m@x"}); err != nil {
+		t.Fatal(err)
+	}
+	if o.Status != StatusShipping {
+		t.Fatalf("status=%s want shipping (auto-dispatch)", o.Status)
+	}
+	if o.DeliveryTrackingCode == "" || !strings.HasPrefix(o.DeliveryTrackingCode, "DELI-") {
+		t.Fatalf("tracking=%q", o.DeliveryTrackingCode)
+	}
+	if o.DeliveryCarrier != DefaultDeliveryCarrier {
+		t.Fatalf("carrier=%q", o.DeliveryCarrier)
+	}
+	if len(o.PendingDeliveryEvents()) != 1 {
+		t.Fatalf("delivery events=%d", len(o.PendingDeliveryEvents()))
+	}
+	if o.PendingDeliveryEvents()[0].StatusCode != DeliveryAccepted {
+		t.Fatalf("delivery status=%s", o.PendingDeliveryEvents()[0].StatusCode)
+	}
+	if err := o.MerchantConfirm(Actor{Role: "merchant"}); err != ErrMerchantConfirmOnly {
+		t.Fatalf("expected ErrMerchantConfirmOnly, got %v", err)
+	}
+}
+
+func TestMerchantCancel_requiresReason(t *testing.T) {
+	t.Parallel()
+	o, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 1000, Quantity: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := o.MerchantCancel(Actor{Role: "merchant"}, "  "); err != ErrMerchantCancelReasonRequired {
+		t.Fatalf("expected ErrMerchantCancelReasonRequired, got %v", err)
+	}
+	if err := o.MerchantCancel(Actor{Role: "merchant"}, "Hết hàng"); err != nil {
+		t.Fatal(err)
+	}
+	if o.Status != StatusCancelled {
+		t.Fatalf("status=%s", o.Status)
+	}
+	evs := o.PendingEvents()
+	if len(evs) == 0 || !strings.Contains(evs[len(evs)-1].Message, "Hết hàng") {
+		t.Fatalf("message=%v", evs)
+	}
+}
+
+func TestMerchantCancel_fromConfirmed(t *testing.T) {
+	t.Parallel()
+	o, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 1000, Quantity: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Confirmed-without-dispatch path (manual status) can still cancel.
+	if err := o.ChangeStatus(StatusConfirmed, Actor{Role: "admin"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := o.MerchantCancel(Actor{Role: "merchant"}, "Khách đổi ý"); err != nil {
+		t.Fatal(err)
+	}
+	if o.Status != StatusCancelled {
+		t.Fatalf("status=%s", o.Status)
+	}
+
+	shipping, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 1000, Quantity: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = shipping.MerchantConfirm(Actor{Role: "merchant"})
+	if shipping.Status != StatusShipping {
+		t.Fatalf("status=%s", shipping.Status)
+	}
+	if err := shipping.MerchantCancel(Actor{Role: "merchant"}, "late"); err != ErrMerchantConfirmOnly {
+		t.Fatalf("expected ErrMerchantConfirmOnly after dispatch, got %v", err)
 	}
 }

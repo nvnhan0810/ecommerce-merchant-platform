@@ -4,6 +4,8 @@ export type OrderStatus =
   | 'confirmed'
   | 'shipping'
   | 'succeeded'
+  | 'returning'
+  | 'returned'
   | 'failed'
   | 'cancelled'
 
@@ -18,6 +20,19 @@ export class OrderItem {
   ) {}
 }
 
+export class DeliveryEvent {
+  constructor(
+    readonly id: string,
+    readonly deliveryTrackingCode: string,
+    readonly statusCode: string,
+    readonly statusLabel: string,
+    readonly message: string,
+    readonly reason: string,
+    readonly occurredAt: string,
+    readonly source: string,
+  ) {}
+}
+
 export class Order {
   constructor(
     readonly id: string,
@@ -27,7 +42,10 @@ export class Order {
     readonly currency: string,
     readonly totalCents: number,
     readonly note: string,
+    readonly deliveryTrackingCode: string,
+    readonly deliveryCarrier: string,
     readonly items: OrderItem[],
+    readonly deliveryEvents: DeliveryEvent[],
     readonly createdAt: string,
     readonly updatedAt: string,
   ) {}

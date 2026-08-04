@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,9 +49,10 @@ func newTestServer(t *testing.T) http.Handler {
 	base := "https://ecomerce-api.nvnhan0810.com"
 	return httpapi.NewRouter(httpapi.Dependencies{
 		Config: config.Config{
-			HTTPAddr:    ":0",
-			Env:         "test",
-			CORSOrigins: []string{"http://localhost:5173"},
+			HTTPAddr:              ":0",
+			Env:                   "test",
+			CORSOrigins:           []string{"http://localhost:5173"},
+			DeliveryWebhookSecret: "test-delivery-webhook-secret",
 		},
 		Health: healthpres.NewHealthHandler("test"),
 		Catalog: catalogpres.NewCatalogHandler(
@@ -86,6 +88,8 @@ func newTestServer(t *testing.T) http.Handler {
 			orderingqueries.NewGetOrderHandler(orderRepo),
 			orderingcommands.NewUpdateOrderStatusHandler(orderRepo),
 			orderingcommands.NewCreateOrderHandler(orderRepo, productRepo),
+			orderingcommands.NewApplyDeliveryEventHandler(orderRepo),
+			"test-delivery-webhook-secret",
 		),
 		Tokens: tokens,
 	})
@@ -434,13 +438,22 @@ func TestOrders_admin_list_get_update_status(t *testing.T) {
 	}
 	var patched struct {
 		Data struct {
-			Status string `json:"status"`
+			Status               string `json:"status"`
+			DeliveryTrackingCode string `json:"deliveryTrackingCode"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(patchRec.Body.Bytes(), &patched); err != nil {
 		t.Fatal(err)
 	}
-	if patched.Data.Status != "confirmed" {
+	// Confirming a new order auto-dispatches internal shipment → shipping.
+	if first.Status == "new" {
+		if patched.Data.Status != "shipping" {
+			t.Fatalf("status=%s want shipping (auto-dispatch from new)", patched.Data.Status)
+		}
+		if patched.Data.DeliveryTrackingCode == "" {
+			t.Fatal("expected delivery tracking code after confirm")
+		}
+	} else if patched.Data.Status != "confirmed" {
 		t.Fatalf("status=%s want confirmed", patched.Data.Status)
 	}
 }
@@ -693,8 +706,18 @@ func TestMerchantOrders_should_list_get_and_update_own_only(t *testing.T) {
 		t.Fatalf("expected 404 for foreign order, got %d", foreignGetRec.Code)
 	}
 
+	newOrderID := ""
+	for _, o := range listPayload.Data {
+		if o.Status == "new" {
+			newOrderID = o.ID
+			break
+		}
+	}
+	if newOrderID == "" {
+		t.Fatal("expected a new order for merchant confirm")
+	}
 	patchBody := bytes.NewBufferString(`{"status":"confirmed"}`)
-	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/merchant/orders/"+first.ID+"/status", patchBody)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/merchant/orders/"+newOrderID+"/status", patchBody)
 	patchReq.Header.Set("Content-Type", "application/json")
 	patchReq.Header.Set("Authorization", "Bearer "+token)
 	patchRec := httptest.NewRecorder()
@@ -704,14 +727,134 @@ func TestMerchantOrders_should_list_get_and_update_own_only(t *testing.T) {
 	}
 	var patched struct {
 		Data struct {
-			Status string `json:"status"`
+			Status               string `json:"status"`
+			DeliveryTrackingCode string `json:"deliveryTrackingCode"`
+			DeliveryEvents       []struct {
+				StatusCode string `json:"status_code"`
+				Source     string `json:"source"`
+			} `json:"delivery_events"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(patchRec.Body.Bytes(), &patched); err != nil {
 		t.Fatal(err)
 	}
-	if patched.Data.Status != "confirmed" {
-		t.Fatalf("status=%s want confirmed", patched.Data.Status)
+	if patched.Data.Status != "shipping" {
+		t.Fatalf("status=%s want shipping (auto-dispatch)", patched.Data.Status)
+	}
+	if patched.Data.DeliveryTrackingCode == "" {
+		t.Fatal("expected auto delivery tracking code")
+	}
+	if len(patched.Data.DeliveryEvents) == 0 || patched.Data.DeliveryEvents[0].StatusCode != "accepted" {
+		t.Fatalf("expected accepted delivery event, got %+v", patched.Data.DeliveryEvents)
+	}
+
+	badPatch := bytes.NewBufferString(`{"status":"shipping"}`)
+	badReq := httptest.NewRequest(http.MethodPatch, "/api/v1/merchant/orders/"+newOrderID+"/status", badPatch)
+	badReq.Header.Set("Content-Type", "application/json")
+	badReq.Header.Set("Authorization", "Bearer "+token)
+	badRec := httptest.NewRecorder()
+	srv.ServeHTTP(badRec, badReq)
+	if badRec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for merchant shipping, got %d", badRec.Code)
+	}
+
+	// Cancel after dispatch must fail (order already shipping).
+	lateCancel := bytes.NewBufferString(`{"status":"cancelled","reason":"quá muộn"}`)
+	lateReq := httptest.NewRequest(http.MethodPatch, "/api/v1/merchant/orders/"+newOrderID+"/status", lateCancel)
+	lateReq.Header.Set("Content-Type", "application/json")
+	lateReq.Header.Set("Authorization", "Bearer "+token)
+	lateRec := httptest.NewRecorder()
+	srv.ServeHTTP(lateRec, lateReq)
+	if lateRec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 cancel after dispatch, got %d body=%s", lateRec.Code, lateRec.Body.String())
+	}
+
+	// Create a fresh new order via storefront, then cancel with reason.
+	uTok := userToken(t, srv)
+	productsReq := httptest.NewRequest(http.MethodGet, "/api/v1/products?limit=50", nil)
+	productsRec := httptest.NewRecorder()
+	srv.ServeHTTP(productsRec, productsReq)
+	var products struct {
+		Data []struct {
+			ID         string `json:"id"`
+			MerchantID string `json:"merchant_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(productsRec.Body.Bytes(), &products); err != nil {
+		t.Fatal(err)
+	}
+	productID := ""
+	for _, p := range products.Data {
+		if p.MerchantID == me.Data.ID {
+			productID = p.ID
+			break
+		}
+	}
+	if productID == "" {
+		t.Fatal("expected product for merchant")
+	}
+	createBody := bytes.NewBufferString(`{"note":"cancel-me","items":[{"product_id":"` + productID + `","quantity":1}]}`)
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/orders", createBody)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer "+uTok)
+	createRec := httptest.NewRecorder()
+	srv.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create order=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if len(created.Data) == 0 {
+		t.Fatal("expected created order")
+	}
+	cancelID := created.Data[0].ID
+	noReason := bytes.NewBufferString(`{"status":"cancelled"}`)
+	noReasonReq := httptest.NewRequest(http.MethodPatch, "/api/v1/merchant/orders/"+cancelID+"/status", noReason)
+	noReasonReq.Header.Set("Content-Type", "application/json")
+	noReasonReq.Header.Set("Authorization", "Bearer "+token)
+	noReasonRec := httptest.NewRecorder()
+	srv.ServeHTTP(noReasonRec, noReasonReq)
+	if noReasonRec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 without cancel reason, got %d body=%s", noReasonRec.Code, noReasonRec.Body.String())
+	}
+	cancelBody := bytes.NewBufferString(`{"status":"cancelled","reason":"Hết hàng kho"}`)
+	cancelReq := httptest.NewRequest(http.MethodPatch, "/api/v1/merchant/orders/"+cancelID+"/status", cancelBody)
+	cancelReq.Header.Set("Content-Type", "application/json")
+	cancelReq.Header.Set("Authorization", "Bearer "+token)
+	cancelRec := httptest.NewRecorder()
+	srv.ServeHTTP(cancelRec, cancelReq)
+	if cancelRec.Code != http.StatusOK {
+		t.Fatalf("cancel status=%d body=%s", cancelRec.Code, cancelRec.Body.String())
+	}
+	var cancelled struct {
+		Data struct {
+			Status  string `json:"status"`
+			History []struct {
+				Message string `json:"message"`
+			} `json:"history"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(cancelRec.Body.Bytes(), &cancelled); err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.Data.Status != "cancelled" {
+		t.Fatalf("status=%s want cancelled", cancelled.Data.Status)
+	}
+	foundReason := false
+	for _, ev := range cancelled.Data.History {
+		if strings.Contains(ev.Message, "Hết hàng kho") {
+			foundReason = true
+			break
+		}
+	}
+	if !foundReason {
+		t.Fatalf("expected cancel reason in history: %+v", cancelled.Data.History)
 	}
 }
 
@@ -819,5 +962,120 @@ func TestUserStorefront_login_create_order_and_list(t *testing.T) {
 	srv.ServeHTTP(profileRec, profileReq)
 	if profileRec.Code != http.StatusOK {
 		t.Fatalf("profile status=%d body=%s", profileRec.Code, profileRec.Body.String())
+	}
+}
+
+func TestDeliveryWebhook_and_admin_simulate(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+	adminTok := adminToken(t, srv)
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/orders?status=confirmed&limit=20", nil)
+	listReq.Header.Set("Authorization", "Bearer "+adminTok)
+	listRec := httptest.NewRecorder()
+	srv.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list=%d", listRec.Code)
+	}
+	var listPayload struct {
+		Data []struct {
+			ID   string `json:"id"`
+			Code string `json:"code"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listPayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(listPayload.Data) == 0 {
+		t.Fatal("expected confirmed order")
+	}
+	order := listPayload.Data[0]
+
+	unauthBody := bytes.NewBufferString(`{"order_code":"` + order.Code + `","status":"accepted"}`)
+	unauthReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/delivery", unauthBody)
+	unauthReq.Header.Set("Content-Type", "application/json")
+	unauthRec := httptest.NewRecorder()
+	srv.ServeHTTP(unauthRec, unauthReq)
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("webhook without secret=%d", unauthRec.Code)
+	}
+
+	hookBody := bytes.NewBufferString(`{
+		"order_code":"` + order.Code + `",
+		"delivery_tracking_code":"GHN999001",
+		"delivery_carrier":"internal",
+		"status":"accepted",
+		"message":"Đã tiếp nhận",
+		"occurred_at":"2026-08-04T06:00:00Z",
+		"event_id":"evt_test_1"
+	}`)
+	hookReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/delivery", hookBody)
+	hookReq.Header.Set("Content-Type", "application/json")
+	hookReq.Header.Set("X-Webhook-Secret", "test-delivery-webhook-secret")
+	hookRec := httptest.NewRecorder()
+	srv.ServeHTTP(hookRec, hookReq)
+	if hookRec.Code != http.StatusOK {
+		t.Fatalf("webhook=%d body=%s", hookRec.Code, hookRec.Body.String())
+	}
+	var hooked struct {
+		Data struct {
+			Status               string `json:"status"`
+			DeliveryTrackingCode string `json:"deliveryTrackingCode"`
+			DeliveryCarrier      string `json:"deliveryCarrier"`
+			DeliveryEvents       []struct {
+				StatusCode string `json:"status_code"`
+			} `json:"delivery_events"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(hookRec.Body.Bytes(), &hooked); err != nil {
+		t.Fatal(err)
+	}
+	if hooked.Data.Status != "shipping" {
+		t.Fatalf("status=%s want shipping", hooked.Data.Status)
+	}
+	if hooked.Data.DeliveryTrackingCode != "GHN999001" {
+		t.Fatalf("tracking=%s", hooked.Data.DeliveryTrackingCode)
+	}
+	if len(hooked.Data.DeliveryEvents) == 0 {
+		t.Fatal("expected delivery events")
+	}
+
+	dupBody := bytes.NewBufferString(`{
+		"order_code":"` + order.Code + `",
+		"status":"delivering",
+		"event_id":"evt_test_1"
+	}`)
+	dupReq := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/delivery", dupBody)
+	dupReq.Header.Set("Content-Type", "application/json")
+	dupReq.Header.Set("X-Webhook-Secret", "test-delivery-webhook-secret")
+	dupRec := httptest.NewRecorder()
+	srv.ServeHTTP(dupRec, dupReq)
+	if dupRec.Code != http.StatusConflict {
+		t.Fatalf("duplicate event=%d", dupRec.Code)
+	}
+
+	simBody := bytes.NewBufferString(`{
+		"delivery_tracking_code":"GHN999001",
+		"status":"delivered",
+		"message":"Giao thành công"
+	}`)
+	simReq := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+order.ID+"/delivery-simulate", simBody)
+	simReq.Header.Set("Content-Type", "application/json")
+	simReq.Header.Set("Authorization", "Bearer "+adminTok)
+	simRec := httptest.NewRecorder()
+	srv.ServeHTTP(simRec, simReq)
+	if simRec.Code != http.StatusOK {
+		t.Fatalf("simulate=%d body=%s", simRec.Code, simRec.Body.String())
+	}
+	var simulated struct {
+		Data struct {
+			Status string `json:"status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(simRec.Body.Bytes(), &simulated); err != nil {
+		t.Fatal(err)
+	}
+	if simulated.Data.Status != "succeeded" {
+		t.Fatalf("status=%s want succeeded", simulated.Data.Status)
 	}
 }
