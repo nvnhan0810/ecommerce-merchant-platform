@@ -1,5 +1,6 @@
 import { Money, Product, ProductId } from '../../products/domain/product'
 import { MerchantStats, type DashboardRepository } from '../domain/stats'
+import { apiFetch } from '@/shared/http'
 
 type ProductApiItem = {
   id: string
@@ -11,13 +12,9 @@ type ProductApiItem = {
   merchant_id: string
 }
 
-function apiBaseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || ''
-}
-
 export class HttpDashboardRepository implements DashboardRepository {
   async loadStats(): Promise<MerchantStats> {
-    const res = await fetch(`${apiBaseUrl()}/api/v1/products?limit=100`)
+    const res = await apiFetch('/api/v1/products?limit=100')
     if (!res.ok) {
       throw new Error(`Failed to load dashboard (${res.status})`)
     }
