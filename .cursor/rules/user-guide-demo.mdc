@@ -1,0 +1,41 @@
+---
+description: Keep the business demo user guide updated when shipping features
+alwaysApply: true
+---
+
+# Hướng dẫn sử dụng (demo nghiệp vụ)
+
+Khi phát triển hoặc thay đổi tính năng có ảnh hưởng đến cách dùng demo (web / merchant / admin), **cập nhật luôn** trang hướng dẫn:
+
+- File: `web/src/app/UserGuidePage.tsx` (+ CSS nếu cần layout)
+- Route: `/huong-dan`
+- Link header: `web/src/app/AppShell.tsx`
+
+## Mục tiêu trang
+
+Đây là **hướng dẫn nghiệp vụ / demo** cho người dùng thử hệ thống — không phải tài liệu kỹ thuật.
+
+Cập nhật theo checklist:
+
+1. Thêm / sửa mục lục và nội dung mô tả thao tác nghiệp vụ của tính năng mới
+2. Cập nhật tài khoản demo nếu seed/login demo đổi
+3. Cập nhật link menu tới đúng màn hình (web path hoặc URL merchant/admin)
+4. Cập nhật “Luồng demo nhanh” nếu quy trình end-to-end đổi
+
+## Được viết
+
+- Vai trò: khách / cửa hàng / quản trị — làm gì trên từng app
+- Tài khoản demo (email + mật khẩu seed công khai của dự án)
+- Các bước thao tác: mua hàng, xác nhận đơn, duyệt danh mục, thanh toán…
+- Thẻ test sandbox công khai của cổng thanh toán (số thẻ / OTP) nếu cần để hoàn tất demo mua hàng
+- Link tới trang UI tương ứng
+
+## Không được viết
+
+- Backend / API / endpoint / payload / schema DB / migration
+- Biến môi trường, secret, hash key, access code, merchant gateway credentials
+- Chi tiết kỹ thuật tích hợp (IPN vs Return, hash, query string, webhook…)
+- Đường dẫn code, tên file handler, cấu hình deploy/k8s
+- Hướng dẫn “cách implement” — chỉ mô tả “cách dùng trên UI”
+
+Nếu tính năng chỉ là refactor nội bộ (không đổi trải nghiệm demo), không bắt buộc sửa trang hướng dẫn.

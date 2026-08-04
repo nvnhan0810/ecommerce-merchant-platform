@@ -19,3 +19,4 @@ Follow global Cursor standards:
 - No business logic in React/Vue components or Go HTTP handlers
 - No `any` in TypeScript; keep `strict: true`
 - Add/update tests with every feature change
+- When a feature changes demo UX, update the business guide (`web/src/app/UserGuidePage.tsx`) — see rule `user-guide-demo`
