@@ -1,4 +1,4 @@
-import { Money, Product, ProductId } from '../../products/domain/product'
+import { Product } from '../../products/domain/product'
 import { MerchantStats, type DashboardRepository } from '../domain/stats'
 import { apiFetch } from '@/shared/http'
 
@@ -9,12 +9,15 @@ type ProductApiItem = {
   price_cents: number
   currency: string
   stock: number
-  merchant_id: string
+  image_key?: string
+  image_url?: string
+  has_orders?: boolean
+  can_delete?: boolean
 }
 
 export class HttpDashboardRepository implements DashboardRepository {
   async loadStats(): Promise<MerchantStats> {
-    const res = await apiFetch('/api/v1/products?limit=100')
+    const res = await apiFetch('/api/v1/merchant/products?limit=200')
     if (!res.ok) {
       throw new Error(`Failed to load dashboard (${res.status})`)
     }
@@ -22,14 +25,19 @@ export class HttpDashboardRepository implements DashboardRepository {
     const products = body.data.map(
       (item) =>
         new Product(
-          new ProductId(item.id),
+          item.id,
           item.name,
           item.description,
-          new Money(item.price_cents, item.currency),
+          item.price_cents,
+          item.currency,
           item.stock,
+          item.image_key ?? '',
+          item.image_url ?? '',
+          Boolean(item.has_orders),
+          item.can_delete ?? !item.has_orders,
         ),
     )
-    const revenueCents = products.reduce((sum, p) => sum + p.price.amountCents, 0)
+    const revenueCents = products.reduce((sum, p) => sum + p.priceCents, 0)
     return new MerchantStats(products.length, 0, revenueCents)
   }
 }
