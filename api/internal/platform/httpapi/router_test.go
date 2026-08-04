@@ -15,6 +15,7 @@ import (
 	healthpres "github.com/nvnhan0810/ecomerce-api/internal/modules/health/presentation"
 	identitycommands "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/commands"
 	identityqueries "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/application/queries"
+	identitydomain "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
 	identityinfra "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/infrastructure"
 	identitypres "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/presentation"
 	orderingcommands "github.com/nvnhan0810/ecomerce-api/internal/modules/ordering/application/commands"
@@ -67,8 +68,10 @@ func newTestServer(t *testing.T) http.Handler {
 			identityqueries.NewListMerchantsHandler(merchants),
 			identityqueries.NewGetUserHandler(users),
 			identityqueries.NewGetMerchantHandler(merchants),
-			identitycommands.NewLoginHandler(admins, hasher, tokens),
-			identityqueries.NewGetCurrentUserHandler(admins),
+			identitycommands.NewLoginHandler(admins, hasher, tokens, identitydomain.RoleAdmin),
+			identitycommands.NewLoginHandler(merchants, hasher, tokens, identitydomain.RoleMerchant),
+			identityqueries.NewGetCurrentUserHandler(admins, identitydomain.RoleAdmin),
+			identityqueries.NewGetCurrentUserHandler(merchants, identitydomain.RoleMerchant),
 			identitycommands.NewCreateUserHandler(users, hasher),
 			identitycommands.NewUpdateUserHandler(users, hasher),
 			identitycommands.NewDeleteUserHandler(users),
@@ -122,6 +125,31 @@ func adminToken(t *testing.T, srv http.Handler) string {
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
+	}
+	return payload.AccessToken
+}
+
+func merchantToken(t *testing.T, srv http.Handler) string {
+	t.Helper()
+	body := bytes.NewBufferString(`{"email":"shop@ecomerce.local","password":"Shop@123456"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/merchant/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("merchant login status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		AccessToken string `json:"access_token"`
+		User        struct {
+			Role string `json:"role"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.User.Role != "merchant" {
+		t.Fatalf("role=%s want merchant", payload.User.Role)
 	}
 	return payload.AccessToken
 }
@@ -411,5 +439,48 @@ func TestOrders_admin_list_get_update_status(t *testing.T) {
 	}
 	if patched.Data.Status != "confirmed" {
 		t.Fatalf("status=%s want confirmed", patched.Data.Status)
+	}
+}
+
+func TestMerchantLogin_should_return_token_and_me(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+
+	adminTok := adminToken(t, srv)
+	forbid := httptest.NewRequest(http.MethodGet, "/api/v1/auth/merchant/me", nil)
+	forbid.Header.Set("Authorization", "Bearer "+adminTok)
+	forbidRec := httptest.NewRecorder()
+	srv.ServeHTTP(forbidRec, forbid)
+	if forbidRec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for admin on merchant me, got %d", forbidRec.Code)
+	}
+
+	token := merchantToken(t, srv)
+	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/merchant/me", nil)
+	meReq.Header.Set("Authorization", "Bearer "+token)
+	meRec := httptest.NewRecorder()
+	srv.ServeHTTP(meRec, meReq)
+	if meRec.Code != http.StatusOK {
+		t.Fatalf("me status=%d body=%s", meRec.Code, meRec.Body.String())
+	}
+	var me struct {
+		Data struct {
+			Email string `json:"email"`
+			Role  string `json:"role"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(meRec.Body.Bytes(), &me); err != nil {
+		t.Fatal(err)
+	}
+	if me.Data.Role != "merchant" || me.Data.Email != "shop@ecomerce.local" {
+		t.Fatalf("unexpected me: %+v", me.Data)
+	}
+
+	adminMe := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	adminMe.Header.Set("Authorization", "Bearer "+token)
+	adminMeRec := httptest.NewRecorder()
+	srv.ServeHTTP(adminMeRec, adminMe)
+	if adminMeRec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for merchant on admin me, got %d", adminMeRec.Code)
 	}
 }

@@ -18,7 +18,9 @@ type IdentityHandler struct {
 	getUser        *queries.GetUserHandler
 	getMerchant    *queries.GetMerchantHandler
 	login          *commands.LoginHandler
+	merchantLogin  *commands.LoginHandler
 	me             *queries.GetCurrentUserHandler
+	merchantMe     *queries.GetCurrentUserHandler
 	createUser     *commands.CreateUserHandler
 	updateUser     *commands.UpdateUserHandler
 	deleteUser     *commands.DeleteUserHandler
@@ -33,7 +35,9 @@ func NewIdentityHandler(
 	getUser *queries.GetUserHandler,
 	getMerchant *queries.GetMerchantHandler,
 	login *commands.LoginHandler,
+	merchantLogin *commands.LoginHandler,
 	me *queries.GetCurrentUserHandler,
+	merchantMe *queries.GetCurrentUserHandler,
 	createUser *commands.CreateUserHandler,
 	updateUser *commands.UpdateUserHandler,
 	deleteUser *commands.DeleteUserHandler,
@@ -47,7 +51,9 @@ func NewIdentityHandler(
 		getUser:        getUser,
 		getMerchant:    getMerchant,
 		login:          login,
+		merchantLogin:  merchantLogin,
 		me:             me,
+		merchantMe:     merchantMe,
 		createUser:     createUser,
 		updateUser:     updateUser,
 		deleteUser:     deleteUser,
@@ -79,6 +85,23 @@ func (h *IdentityHandler) Login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+func (h *IdentityHandler) MerchantLogin(w http.ResponseWriter, r *http.Request) {
+	var body loginRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.merchantLogin.Handle(r.Context(), commands.LoginCommand{
+		Email:    body.Email,
+		Password: body.Password,
+	})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
 func (h *IdentityHandler) Me(w http.ResponseWriter, r *http.Request) {
 	claims, ok := authctx.FromContext(r.Context())
 	if !ok {
@@ -86,6 +109,20 @@ func (h *IdentityHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := h.me.Handle(r.Context(), queries.GetCurrentUserQuery{UserID: claims.UserID})
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": user})
+}
+
+func (h *IdentityHandler) MerchantMe(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authctx.FromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	user, err := h.merchantMe.Handle(r.Context(), queries.GetCurrentUserQuery{UserID: claims.UserID})
 	if err != nil {
 		writeIdentityError(w, err)
 		return

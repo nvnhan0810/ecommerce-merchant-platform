@@ -94,4 +94,13 @@ DB_HOST=127.0.0.1 DB_SSLMODE=require go run ./cmd/seed orders
 Plus **20** demo products (5 / merchant) gắn `merchant_id` thật, và **7** demo orders (mỗi trạng thái một đơn: `new` / `paid` / `confirmed` / `shipping` / `succeeded` / `failed` / `cancelled`). Mỗi order có `code` unique 10 ký tự A–Z/0–9 để tracking, thuộc 1 user + 1 merchant; line items chỉ lấy sản phẩm của merchant đó.  
 `make seed-products` / `make seed-orders` seed riêng từng phần. API boot với `DB_SEED=true` cũng gọi cùng seeder.
 
+### Auth
+
+| Portal | Login | Me |
+|--------|-------|----|
+| Admin | `POST /api/v1/auth/login` | `GET /api/v1/auth/me` (admin token) |
+| Merchant | `POST /api/v1/auth/merchant/login` | `GET /api/v1/auth/merchant/me` (merchant token) |
+
+Body login: `{"email":"...","password":"..."}` → `{access_token, token_type, user}`.
+
 > GIN là HTTP framework, không dùng để migrate. Stack hiện tại giữ Chi + Goose.

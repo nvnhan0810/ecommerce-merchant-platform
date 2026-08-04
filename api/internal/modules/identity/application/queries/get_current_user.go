@@ -11,15 +11,16 @@ type GetCurrentUserQuery struct {
 }
 
 type GetCurrentUserHandler struct {
-	admins domain.AccountRepository
+	accounts domain.AccountRepository
+	role     domain.Role
 }
 
-func NewGetCurrentUserHandler(admins domain.AccountRepository) *GetCurrentUserHandler {
-	return &GetCurrentUserHandler{admins: admins}
+func NewGetCurrentUserHandler(accounts domain.AccountRepository, role domain.Role) *GetCurrentUserHandler {
+	return &GetCurrentUserHandler{accounts: accounts, role: role}
 }
 
 func (h *GetCurrentUserHandler) Handle(_ context.Context, q GetCurrentUserQuery) (AccountDTO, error) {
-	account, err := h.admins.FindByID(q.UserID)
+	account, err := h.accounts.FindByID(q.UserID)
 	if err != nil {
 		return AccountDTO{}, err
 	}
@@ -27,6 +28,6 @@ func (h *GetCurrentUserHandler) Handle(_ context.Context, q GetCurrentUserQuery)
 		ID:          string(account.ID),
 		Email:       account.Email,
 		DisplayName: account.DisplayName,
-		Role:        string(domain.RoleAdmin),
+		Role:        string(h.role),
 	}, nil
 }

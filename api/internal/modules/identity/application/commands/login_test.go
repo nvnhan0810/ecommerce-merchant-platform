@@ -20,7 +20,7 @@ func TestLoginHandler_should_issue_token_for_admin(t *testing.T) {
 	}
 	_ = admins.Save(a)
 
-	handler := NewLoginHandler(admins, h, stubTokens{})
+	handler := NewLoginHandler(admins, h, stubTokens{}, domain.RoleAdmin)
 	res, err := handler.Handle(context.Background(), LoginCommand{
 		Email:    "admin@ecomerce.local",
 		Password: "Admin@123456",
@@ -35,10 +35,48 @@ func TestLoginHandler_should_issue_token_for_admin(t *testing.T) {
 
 func TestLoginHandler_should_reject_unknown_admin(t *testing.T) {
 	t.Parallel()
-	handler := NewLoginHandler(infrastructureMem(), stubHasher{}, stubTokens{})
+	handler := NewLoginHandler(infrastructureMem(), stubHasher{}, stubTokens{}, domain.RoleAdmin)
 	_, err := handler.Handle(context.Background(), LoginCommand{
 		Email:    "shop@ecomerce.local",
 		Password: "Shop@123456",
+	})
+	if err != domain.ErrInvalidCredentials {
+		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
+	}
+}
+
+func TestLoginHandler_should_issue_token_for_merchant(t *testing.T) {
+	t.Parallel()
+	merchants := infrastructureMem()
+	h := stubHasher{}
+	m, err := domain.NewAccount("shop@ecomerce.local", "Shop Demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetPassword(h, "Shop@123456"); err != nil {
+		t.Fatal(err)
+	}
+	_ = merchants.Save(m)
+
+	handler := NewLoginHandler(merchants, h, stubTokens{}, domain.RoleMerchant)
+	res, err := handler.Handle(context.Background(), LoginCommand{
+		Email:    "shop@ecomerce.local",
+		Password: "Shop@123456",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.AccessToken == "" || res.User.Role != "merchant" {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+}
+
+func TestLoginHandler_merchant_should_reject_admin_email(t *testing.T) {
+	t.Parallel()
+	handler := NewLoginHandler(infrastructureMem(), stubHasher{}, stubTokens{}, domain.RoleMerchant)
+	_, err := handler.Handle(context.Background(), LoginCommand{
+		Email:    "admin@ecomerce.local",
+		Password: "Admin@123456",
 	})
 	if err != domain.ErrInvalidCredentials {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
