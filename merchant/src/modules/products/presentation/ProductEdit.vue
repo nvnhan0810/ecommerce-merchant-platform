@@ -9,23 +9,49 @@ import {
   UploadProductImageUseCase,
 } from '../application/product-use-cases'
 import { HttpProductRepository } from '../infrastructure/http-product-repository'
+import {
+  CreateCategoryUseCase,
+  ListAssignableCategoriesUseCase,
+} from '@/modules/categories/application/category-use-cases'
+import { HttpCategoryRepository } from '@/modules/categories/infrastructure/http-category-repository'
 import ProductForm from './ProductForm.vue'
 
 const route = useRoute()
 const router = useRouter()
 const queryClient = useQueryClient()
 const repo = new HttpProductRepository()
+const categoryRepo = new HttpCategoryRepository()
 const getProduct = new GetProductUseCase(repo)
 const updateProduct = new UpdateProductUseCase(repo)
 const uploadImage = new UploadProductImageUseCase(repo)
 const deleteImage = new DeleteProductImageUseCase(repo)
+const listCategories = new ListAssignableCategoriesUseCase(categoryRepo)
+const createCategory = new CreateCategoryUseCase(categoryRepo)
 const formError = ref('')
+const formRef = ref<{ selectCategory: (id: string) => void } | null>(null)
 
 const productId = computed(() => String(route.params.id))
 
 const { data: product, isLoading, isError, error, refetch } = useQuery({
   queryKey: computed(() => ['merchant', 'products', productId.value]),
   queryFn: () => getProduct.execute(productId.value),
+})
+
+const { data: categories, refetch: refetchCategories } = useQuery({
+  queryKey: ['merchant', 'categories'],
+  queryFn: () => listCategories.execute(),
+})
+
+const createCategoryMutation = useMutation({
+  mutationFn: (name: string) => createCategory.execute(name),
+  onSuccess: async (cat) => {
+    await queryClient.invalidateQueries({ queryKey: ['merchant', 'categories'] })
+    await refetchCategories()
+    formRef.value?.selectCategory(cat.id)
+  },
+  onError: (e: Error) => {
+    formError.value = e.message
+  },
 })
 
 const saveMutation = useMutation({
@@ -35,6 +61,7 @@ const saveMutation = useMutation({
     priceCents: number
     currency: string
     stock: number
+    categoryIds: string[]
     file: File | null
   }) => {
     let saved = await updateProduct.execute({
@@ -44,6 +71,7 @@ const saveMutation = useMutation({
       priceCents: payload.priceCents,
       currency: payload.currency,
       stock: payload.stock,
+      categoryIds: payload.categoryIds,
     })
     if (payload.file) {
       saved = await uploadImage.execute(saved.id, payload.file)
@@ -94,14 +122,18 @@ async function onRemoveImage(): Promise<void> {
     </div>
     <ProductForm
       v-else-if="product"
+      ref="formRef"
+      :categories="categories ?? []"
       :initial="product"
       submit-label="Cập nhật"
       show-remove-image
       :pending="saveMutation.isPending.value || removeImageMutation.isPending.value"
+      :creating-category="createCategoryMutation.isPending.value"
       :error="formError"
       @submit="(p) => { formError = ''; saveMutation.mutate(p) }"
       @cancel="router.push(`/products/${productId}`)"
       @remove-image="onRemoveImage"
+      @create-category="(name) => { formError = ''; createCategoryMutation.mutate(name) }"
     />
   </section>
 </template>

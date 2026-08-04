@@ -99,6 +99,47 @@ func (r *PostgresProductRepository) ListByMerchant(merchantID string, limit, off
 	return out, rows.Err()
 }
 
+func (r *PostgresProductRepository) ListByIDs(ids []domain.ProductID) ([]domain.Product, error) {
+	if len(ids) == 0 {
+		return []domain.Product{}, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	raw := make([]string, len(ids))
+	for i, id := range ids {
+		raw[i] = string(id)
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, merchant_id, name, description, price_cents, currency, stock, image_key, created_at
+		FROM products
+		WHERE id = ANY($1::uuid[])
+		ORDER BY created_at DESC
+	`, raw)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byID := make(map[domain.ProductID]domain.Product, len(ids))
+	for rows.Next() {
+		p, err := scanProduct(rows)
+		if err != nil {
+			return nil, err
+		}
+		byID[p.ID] = p
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]domain.Product, 0, len(ids))
+	for _, id := range ids {
+		if p, ok := byID[id]; ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
 func (r *PostgresProductRepository) HasOrderItems(id domain.ProductID) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -134,6 +134,7 @@ type ProductRepository interface {
 	FindByID(id ProductID) (Product, error)
 	List(limit, offset int) ([]Product, error)
 	ListByMerchant(merchantID string, limit, offset int) ([]Product, error)
+	ListByIDs(ids []ProductID) ([]Product, error)
 	HasOrderItems(id ProductID) (bool, error)
 	Delete(id ProductID) error
 }

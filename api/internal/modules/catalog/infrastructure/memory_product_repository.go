@@ -79,6 +79,18 @@ func (r *InMemoryProductRepository) ListByMerchant(merchantID string, limit, off
 	return append([]domain.Product(nil), filtered[offset:end]...), nil
 }
 
+func (r *InMemoryProductRepository) ListByIDs(ids []domain.ProductID) ([]domain.Product, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]domain.Product, 0, len(ids))
+	for _, id := range ids {
+		if p, ok := r.items[id]; ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
 func (r *InMemoryProductRepository) HasOrderItems(id domain.ProductID) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

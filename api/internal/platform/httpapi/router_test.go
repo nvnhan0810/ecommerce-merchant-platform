@@ -49,6 +49,7 @@ func newTestServer(t *testing.T) http.Handler {
 	checker := cataloginfra.NewAccountMerchantChecker(merchants)
 	nop := storage.NopStore{}
 	base := "https://ecomerce-api.nvnhan0810.com"
+	categoryRepo := cataloginfra.NewInMemoryCategoryRepository()
 	return httpapi.NewRouter(httpapi.Dependencies{
 		Config: config.Config{
 			HTTPAddr:              ":0",
@@ -58,13 +59,20 @@ func newTestServer(t *testing.T) http.Handler {
 		},
 		Health: healthpres.NewHealthHandler("test"),
 		Catalog: catalogpres.NewCatalogHandler(
-			queries.NewListProductsHandler(productRepo, merchants, geo, base),
-			queries.NewGetProductHandler(productRepo, merchants, geo, base),
-			commands.NewCreateProductHandler(productRepo, checker, base),
-			commands.NewUpdateProductHandler(productRepo, checker, base),
+			queries.NewListProductsHandler(productRepo, categoryRepo, merchants, geo, base),
+			queries.NewGetProductHandler(productRepo, categoryRepo, merchants, geo, base),
+			commands.NewCreateProductHandler(productRepo, categoryRepo, checker, base),
+			commands.NewUpdateProductHandler(productRepo, categoryRepo, checker, base),
 			commands.NewDeleteProductHandler(productRepo, nop),
-			commands.NewUploadProductImageHandler(productRepo, nop, base),
-			commands.NewDeleteProductImageHandler(productRepo, nop, base),
+			commands.NewUploadProductImageHandler(productRepo, categoryRepo, nop, base),
+			commands.NewDeleteProductImageHandler(productRepo, categoryRepo, nop, base),
+			queries.NewListCategoriesHandler(categoryRepo),
+			queries.NewGetCategoryHandler(categoryRepo),
+			commands.NewCreateCategoryHandler(categoryRepo),
+			commands.NewUpdateCategoryHandler(categoryRepo),
+			commands.NewUpdateCategoryStatusHandler(categoryRepo),
+			commands.NewDeleteCategoryHandler(categoryRepo),
+			commands.NewRemoveProductCategoryHandler(productRepo, categoryRepo),
 			nop,
 		),
 		Identity: identitypres.NewIdentityHandler(

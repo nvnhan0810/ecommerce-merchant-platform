@@ -50,6 +50,7 @@ func main() {
 	}
 
 	productRepo := cataloginfra.NewPostgresProductRepository(pool)
+	categoryRepo := cataloginfra.NewPostgresCategoryRepository(pool)
 	orderRepo := orderinginfra.NewPostgresOrderRepository(pool)
 	userRepo := identityinfra.NewPostgresUserRepository(pool)
 	addressRepo := postgres.NewUserAddressRepository(pool)
@@ -68,11 +69,11 @@ func main() {
 		}
 	}
 
-	listProducts := queries.NewListProductsHandler(productRepo, merchantRepo, geoRepo, cfg.PublicAPIBase)
+	listProducts := queries.NewListProductsHandler(productRepo, categoryRepo, merchantRepo, geoRepo, cfg.PublicAPIBase)
 	merchantChecker := cataloginfra.NewAccountMerchantChecker(merchantRepo)
-	getProduct := queries.NewGetProductHandler(productRepo, merchantRepo, geoRepo, cfg.PublicAPIBase)
-	createProduct := commands.NewCreateProductHandler(productRepo, merchantChecker, cfg.PublicAPIBase)
-	updateProduct := commands.NewUpdateProductHandler(productRepo, merchantChecker, cfg.PublicAPIBase)
+	getProduct := queries.NewGetProductHandler(productRepo, categoryRepo, merchantRepo, geoRepo, cfg.PublicAPIBase)
+	createProduct := commands.NewCreateProductHandler(productRepo, categoryRepo, merchantChecker, cfg.PublicAPIBase)
+	updateProduct := commands.NewUpdateProductHandler(productRepo, categoryRepo, merchantChecker, cfg.PublicAPIBase)
 
 	var objectStore storage.ObjectStore = storage.NopStore{}
 	if s3, err := storage.NewS3Store(cfg.S3); err != nil {
@@ -82,15 +83,26 @@ func main() {
 		log.Printf("object storage ready bucket=%s endpoint=%s", cfg.S3.Bucket, cfg.S3.Endpoint)
 	}
 	deleteProduct := commands.NewDeleteProductHandler(productRepo, objectStore)
-	uploadImage := commands.NewUploadProductImageHandler(productRepo, objectStore, cfg.PublicAPIBase)
-	deleteImage := commands.NewDeleteProductImageHandler(productRepo, objectStore, cfg.PublicAPIBase)
+	uploadImage := commands.NewUploadProductImageHandler(productRepo, categoryRepo, objectStore, cfg.PublicAPIBase)
+	deleteImage := commands.NewDeleteProductImageHandler(productRepo, categoryRepo, objectStore, cfg.PublicAPIBase)
+
+	listCategories := queries.NewListCategoriesHandler(categoryRepo)
+	getCategory := queries.NewGetCategoryHandler(categoryRepo)
+	createCategory := commands.NewCreateCategoryHandler(categoryRepo)
+	updateCategory := commands.NewUpdateCategoryHandler(categoryRepo)
+	updateCategoryStatus := commands.NewUpdateCategoryStatusHandler(categoryRepo)
+	deleteCategory := commands.NewDeleteCategoryHandler(categoryRepo)
+	removeProductCategory := commands.NewRemoveProductCategoryHandler(productRepo, categoryRepo)
 
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Config: cfg,
 		Health: healthpres.NewHealthHandler(cfg.Env),
 		Catalog: catalogpres.NewCatalogHandler(
 			listProducts, getProduct, createProduct, updateProduct, deleteProduct,
-			uploadImage, deleteImage, objectStore,
+			uploadImage, deleteImage,
+			listCategories, getCategory, createCategory, updateCategory, updateCategoryStatus, deleteCategory,
+			removeProductCategory,
+			objectStore,
 		),
 		Identity: identitypres.NewIdentityHandler(
 			identityqueries.NewListUsersHandler(userRepo),

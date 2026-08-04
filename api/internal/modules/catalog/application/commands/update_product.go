@@ -15,19 +15,34 @@ type UpdateProductCommand struct {
 	PriceCents      int64
 	Currency        string
 	Stock           int
+	CategoryIDs     []string
+	SetCategories   bool // true when CategoryIDs was present in request (including empty)
 }
 
 type UpdateProductHandler struct {
 	repo       domain.ProductRepository
+	categories domain.CategoryRepository
 	merchants  domain.MerchantChecker
 	publicBase string
+	setCats    *SetProductCategoriesHandler
 }
 
-func NewUpdateProductHandler(repo domain.ProductRepository, merchants domain.MerchantChecker, publicBase string) *UpdateProductHandler {
-	return &UpdateProductHandler{repo: repo, merchants: merchants, publicBase: publicBase}
+func NewUpdateProductHandler(
+	repo domain.ProductRepository,
+	categories domain.CategoryRepository,
+	merchants domain.MerchantChecker,
+	publicBase string,
+) *UpdateProductHandler {
+	return &UpdateProductHandler{
+		repo:       repo,
+		categories: categories,
+		merchants:  merchants,
+		publicBase: publicBase,
+		setCats:    NewSetProductCategoriesHandler(repo, categories),
+	}
 }
 
-func (h *UpdateProductHandler) Handle(_ context.Context, cmd UpdateProductCommand) (ProductResult, error) {
+func (h *UpdateProductHandler) Handle(ctx context.Context, cmd UpdateProductCommand) (ProductResult, error) {
 	product, err := h.repo.FindByID(cmd.ID)
 	if err != nil {
 		return ProductResult{}, err
@@ -52,5 +67,14 @@ func (h *UpdateProductHandler) Handle(_ context.Context, cmd UpdateProductComman
 	if err := h.repo.Save(product); err != nil {
 		return ProductResult{}, err
 	}
-	return toProductResult(product, h.publicBase), nil
+	if cmd.SetCategories {
+		if err := h.setCats.Handle(ctx, SetProductCategoriesCommand{
+			ProductID:       product.ID,
+			CategoryIDs:     cmd.CategoryIDs,
+			OwnerMerchantID: cmd.OwnerMerchantID,
+		}); err != nil {
+			return ProductResult{}, err
+		}
+	}
+	return productResultWithCategories(product, h.categories, h.publicBase)
 }

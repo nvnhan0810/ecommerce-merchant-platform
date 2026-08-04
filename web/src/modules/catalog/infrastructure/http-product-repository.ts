@@ -1,4 +1,9 @@
-import { Money, Product, ProductId, type ProductRepository } from '../domain/product'
+import { Money, Product, ProductId, type ProductCategory, type ProductRepository } from '../domain/product'
+
+type CategoryApiItem = {
+  id: string
+  name: string
+}
 
 type ProductApiItem = {
   id: string
@@ -12,6 +17,11 @@ type ProductApiItem = {
   merchant_display_name?: string
   merchant_avatar_url?: string
   merchant_province_name?: string
+  categories?: CategoryApiItem[]
+}
+
+function mapCategories(items?: CategoryApiItem[]): ProductCategory[] {
+  return (items ?? []).map((c) => ({ id: c.id, name: c.name }))
 }
 
 function mapProduct(item: ProductApiItem): Product {
@@ -26,6 +36,7 @@ function mapProduct(item: ProductApiItem): Product {
     item.merchant_display_name ?? '',
     item.merchant_avatar_url ?? '',
     item.merchant_province_name ?? '',
+    mapCategories(item.categories),
   )
 }
 
@@ -34,10 +45,13 @@ function apiBaseUrl(): string {
 }
 
 export class HttpProductRepository implements ProductRepository {
-  async list(limit = 40, merchantId?: string): Promise<Product[]> {
+  async list(limit = 40, merchantId?: string, categoryId?: string): Promise<Product[]> {
     const params = new URLSearchParams({ limit: String(limit) })
     if (merchantId?.trim()) {
       params.set('merchant_id', merchantId.trim())
+    }
+    if (categoryId?.trim()) {
+      params.set('category_id', categoryId.trim())
     }
     const res = await fetch(`${apiBaseUrl()}/api/v1/products?${params.toString()}`)
     if (!res.ok) {
