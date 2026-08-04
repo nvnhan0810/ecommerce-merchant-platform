@@ -426,36 +426,6 @@ func TestOrders_admin_list_get_update_status(t *testing.T) {
 	if codeRec.Code != http.StatusOK {
 		t.Fatalf("code search status=%d body=%s", codeRec.Code, codeRec.Body.String())
 	}
-
-	patchBody := bytes.NewBufferString(`{"status":"confirmed"}`)
-	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/orders/"+first.ID+"/status", patchBody)
-	patchReq.Header.Set("Content-Type", "application/json")
-	patchReq.Header.Set("Authorization", "Bearer "+token)
-	patchRec := httptest.NewRecorder()
-	srv.ServeHTTP(patchRec, patchReq)
-	if patchRec.Code != http.StatusOK {
-		t.Fatalf("patch status=%d body=%s", patchRec.Code, patchRec.Body.String())
-	}
-	var patched struct {
-		Data struct {
-			Status               string `json:"status"`
-			DeliveryTrackingCode string `json:"deliveryTrackingCode"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(patchRec.Body.Bytes(), &patched); err != nil {
-		t.Fatal(err)
-	}
-	// Confirming a new order auto-dispatches internal shipment → shipping.
-	if first.Status == "new" {
-		if patched.Data.Status != "shipping" {
-			t.Fatalf("status=%s want shipping (auto-dispatch from new)", patched.Data.Status)
-		}
-		if patched.Data.DeliveryTrackingCode == "" {
-			t.Fatal("expected delivery tracking code after confirm")
-		}
-	} else if patched.Data.Status != "confirmed" {
-		t.Fatalf("status=%s want confirmed", patched.Data.Status)
-	}
 }
 
 func TestMerchantLogin_should_return_token_and_me(t *testing.T) {

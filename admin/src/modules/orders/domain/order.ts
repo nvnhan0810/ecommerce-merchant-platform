@@ -131,6 +131,5 @@ export type SimulateDeliveryInput = {
 export interface OrderRepository {
   list(filter?: ListOrdersFilter): Promise<Order[]>
   getById(id: string): Promise<Order>
-  updateStatus(id: string, status: OrderStatus): Promise<Order>
   simulateDelivery(id: string, input: SimulateDeliveryInput): Promise<Order>
 }

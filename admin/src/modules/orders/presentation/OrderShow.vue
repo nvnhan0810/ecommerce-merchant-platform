@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { computed, ref } from 'vue'
+import { useQuery } from '@tanstack/vue-query'
 import { useRoute } from 'vue-router'
-import { GetOrderUseCase, UpdateOrderStatusUseCase } from '../application/order-use-cases'
+import { GetOrderUseCase } from '../application/order-use-cases'
 import { HttpOrderRepository } from '../infrastructure/http-order-repository'
-import { ORDER_STATUS_OPTIONS, type OrderStatus } from '../domain/order'
 import OrderStatusBadge from './OrderStatusBadge.vue'
 import { ListUsersUseCase } from '@/modules/users/application/user-use-cases'
 import { HttpUserRepository } from '@/modules/users/infrastructure/http-user-repository'
@@ -12,31 +11,18 @@ import { ListMerchantsUseCase } from '@/modules/merchants/application/merchant-u
 import { HttpMerchantRepository } from '@/modules/merchants/infrastructure/http-merchant-repository'
 
 const route = useRoute()
-const queryClient = useQueryClient()
 const repo = new HttpOrderRepository()
 const getOrder = new GetOrderUseCase(repo)
-const updateStatus = new UpdateOrderStatusUseCase(repo)
 const listUsers = new ListUsersUseCase(new HttpUserRepository())
 const listMerchants = new ListMerchantsUseCase(new HttpMerchantRepository())
 
 const orderId = computed(() => String(route.params.id))
-const selectedStatus = ref<OrderStatus>('new')
-const statusMessage = ref('')
+const activeTab = ref<'details' | 'tracking' | 'history'>('details')
 
 const { data: order, isLoading, isError, error, refetch } = useQuery({
   queryKey: computed(() => ['admin', 'orders', orderId.value]),
   queryFn: () => getOrder.execute(orderId.value),
 })
-
-watch(
-  order,
-  (value) => {
-    if (value) {
-      selectedStatus.value = value.status
-    }
-  },
-  { immediate: true },
-)
 
 const { data: users } = useQuery({
   queryKey: ['admin', 'users'],
@@ -82,22 +68,6 @@ function actorLabel(name: string, email: string, role: string): string {
   if (!role) return who
   return `${who} · ${role}`
 }
-
-const statusMutation = useMutation({
-  mutationFn: (status: OrderStatus) => updateStatus.execute(orderId.value, status),
-  onSuccess: async () => {
-    statusMessage.value = 'Đã cập nhật trạng thái.'
-    await queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] })
-  },
-  onError: (err: Error) => {
-    statusMessage.value = err.message
-  },
-})
-
-async function onSaveStatus(): Promise<void> {
-  statusMessage.value = ''
-  await statusMutation.mutateAsync(selectedStatus.value)
-}
 </script>
 
 <template>
@@ -118,137 +88,148 @@ async function onSaveStatus(): Promise<void> {
       <button type="button" class="ghost" @click="refetch()">Thử lại</button>
     </div>
     <article v-else-if="order" class="detail">
-      <dl class="meta">
-        <div>
-          <dt>Mã đơn</dt>
-          <dd class="code">{{ order.code }}</dd>
-        </div>
-        <div>
+      <div class="meta-grid">
+        <div class="meta-item">
           <dt>Mã vận đơn</dt>
           <dd class="code">{{ order.deliveryTrackingCode || '—' }}</dd>
         </div>
-        <div>
+        <div class="meta-item">
           <dt>Đơn vị vận chuyển</dt>
           <dd>{{ order.deliveryCarrier || 'internal' }}</dd>
         </div>
-        <div>
-          <dt>Trạng thái</dt>
-          <dd><OrderStatusBadge :status="order.status" :label="order.statusLabel" /></dd>
-        </div>
-        <div>
+        <div class="meta-item">
           <dt>Tổng tiền</dt>
-          <dd>{{ formatMoney(order.totalCents, order.currency) }}</dd>
+          <dd class="total-price">{{ formatMoney(order.totalCents, order.currency) }}</dd>
         </div>
-        <div>
+        <div class="meta-item">
           <dt>User</dt>
           <dd>{{ userLabel }}</dd>
         </div>
-        <div>
+        <div class="meta-item">
           <dt>Merchant</dt>
           <dd>{{ merchantLabel }}</dd>
         </div>
-        <div>
-          <dt>Ghi chú</dt>
-          <dd>{{ order.note || '—' }}</dd>
-        </div>
-        <div>
+        <div class="meta-item">
           <dt>Tạo lúc</dt>
           <dd>{{ formatDate(order.createdAt) }}</dd>
         </div>
-        <div>
+        <div class="meta-item">
           <dt>Cập nhật</dt>
           <dd>{{ formatDate(order.updatedAt) }}</dd>
         </div>
-      </dl>
+        <div class="meta-item">
+          <dt>Ghi chú</dt>
+          <dd>{{ order.note || '—' }}</dd>
+        </div>
+      </div>
 
-      <form class="status-form" @submit.prevent="onSaveStatus">
-        <label>
-          Đổi trạng thái
-          <select v-model="selectedStatus">
-            <option v-for="opt in ORDER_STATUS_OPTIONS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </label>
-        <button type="submit" class="primary" :disabled="statusMutation.isPending.value">
-          Lưu trạng thái
+      <div class="tabs">
+        <button
+          type="button"
+          class="tab-btn"
+          :class="{ 'active-tab': activeTab === 'details' }"
+          @click="activeTab = 'details'"
+        >
+          Chi tiết đơn hàng
         </button>
-        <RouterLink class="ghost" :to="`/delivery-simulator?orderId=${order.id}`">
-          Mô phỏng TMS
-        </RouterLink>
-        <p v-if="statusMessage" class="hint">{{ statusMessage }}</p>
-      </form>
-
-      <div class="items">
-        <h2>Sản phẩm</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Tên</th>
-              <th>Đơn giá</th>
-              <th>SL</th>
-              <th>Thành tiền</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in order.items" :key="item.id">
-              <td>{{ item.productName }}</td>
-              <td>{{ formatMoney(item.unitPriceCents, order.currency) }}</td>
-              <td>{{ item.quantity }}</td>
-              <td>{{ formatMoney(item.lineTotalCents, order.currency) }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <button
+          type="button"
+          class="tab-btn"
+          :class="{ 'active-tab': activeTab === 'tracking' }"
+          @click="activeTab = 'tracking'"
+        >
+          Theo dõi vận chuyển
+        </button>
+        <button
+          type="button"
+          class="tab-btn"
+          :class="{ 'active-tab': activeTab === 'history' }"
+          @click="activeTab = 'history'"
+        >
+          Lịch sử cập nhật
+        </button>
       </div>
 
-      <div class="history">
-        <h2>Timeline TMS</h2>
-        <ol v-if="deliveryEvents.length" class="timeline">
-          <li v-for="ev in deliveryEvents" :key="ev.id" class="event--delivery">
-            <div class="dot" aria-hidden="true" />
-            <div class="event-body">
-              <div class="event-top">
-                <strong>{{ ev.statusLabel || ev.statusCode }}</strong>
-                <time>{{ formatDate(ev.occurredAt) }}</time>
-              </div>
-              <p class="event-msg">{{ ev.message }}</p>
-              <p v-if="ev.reason" class="event-actor">Lý do: {{ ev.reason }}</p>
-              <p class="event-actor">
-                {{ ev.deliveryTrackingCode || '—' }} · {{ ev.source || 'tms' }}
-              </p>
-            </div>
-          </li>
-        </ol>
-        <p v-else class="empty-history">Chưa có sự kiện vận chuyển.</p>
+      <div v-if="activeTab === 'details'" class="tab-content">
+        <div class="items">
+          <h2>Sản phẩm</h2>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tên sản phẩm</th>
+                  <th>Đơn giá</th>
+                  <th class="text-center">Số lượng</th>
+                  <th class="text-right">Thành tiền</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in order.items" :key="item.id">
+                  <td>{{ item.productName }}</td>
+                  <td>{{ formatMoney(item.unitPriceCents, order.currency) }}</td>
+                  <td class="text-center">{{ item.quantity }}</td>
+                  <td class="text-right">{{ formatMoney(item.lineTotalCents, order.currency) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      <div class="history">
-        <h2>Lịch sử cập nhật</h2>
-        <ol v-if="history.length" class="timeline">
-          <li v-for="ev in history" :key="ev.id" :class="`event--${ev.eventType}`">
-            <div class="dot" aria-hidden="true" />
-            <div class="event-body">
-              <div class="event-top">
-                <strong>{{ ev.eventLabel }}</strong>
-                <time>{{ formatDate(ev.createdAt) }}</time>
+      <div v-if="activeTab === 'tracking'" class="tab-content">
+        <div class="history">
+          <ol v-if="deliveryEvents.length" class="timeline">
+            <li v-for="ev in deliveryEvents" :key="ev.id" class="event--delivery">
+              <div class="dot" aria-hidden="true" />
+              <div class="event-body">
+                <div class="event-top">
+                  <strong>{{ ev.statusLabel || ev.statusCode }}</strong>
+                  <time>{{ formatDate(ev.occurredAt) }}</time>
+                </div>
+                <p class="event-msg">{{ ev.message }}</p>
+                <p v-if="ev.reason" class="event-actor reason-box">Lý do: {{ ev.reason }}</p>
+                <p class="event-actor">
+                  {{ ev.deliveryTrackingCode || '—' }} · {{ ev.source || 'tms' }}
+                </p>
               </div>
-              <p class="event-msg">{{ ev.message }}</p>
-              <div v-if="ev.toStatus" class="event-status">
-                <OrderStatusBadge
-                  v-if="ev.fromStatus"
-                  :status="ev.fromStatus"
-                  :label="ev.fromStatusLabel"
-                />
-                <span v-if="ev.fromStatus" class="arrow">→</span>
-                <OrderStatusBadge :status="ev.toStatus" :label="ev.toStatusLabel" />
+            </li>
+          </ol>
+          <div v-else class="empty-state">
+            <p class="empty-history">Chưa có sự kiện vận chuyển.</p>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'history'" class="tab-content">
+        <div class="history">
+          <ol v-if="history.length" class="timeline">
+            <li v-for="ev in history" :key="ev.id" :class="`event--${ev.eventType}`">
+              <div class="dot" aria-hidden="true" />
+              <div class="event-body">
+                <div class="event-top">
+                  <strong>{{ ev.eventLabel }}</strong>
+                  <time>{{ formatDate(ev.createdAt) }}</time>
+                </div>
+                <p class="event-msg">{{ ev.message }}</p>
+                <div v-if="ev.toStatus" class="event-status">
+                  <OrderStatusBadge
+                    v-if="ev.fromStatus"
+                    :status="ev.fromStatus"
+                    :label="ev.fromStatusLabel"
+                  />
+                  <span v-if="ev.fromStatus" class="arrow">→</span>
+                  <OrderStatusBadge :status="ev.toStatus" :label="ev.toStatusLabel" />
+                </div>
+                <p class="event-actor">
+                  {{ actorLabel(ev.actorName, ev.actorEmail, ev.actorRole) }}
+                </p>
               </div>
-              <p class="event-actor">
-                {{ actorLabel(ev.actorName, ev.actorEmail, ev.actorRole) }}
-              </p>
-            </div>
-          </li>
-        </ol>
-        <p v-else class="empty-history">Chưa có lịch sử cập nhật.</p>
+            </li>
+          </ol>
+          <div v-else class="empty-state">
+            <p class="empty-history">Chưa có lịch sử cập nhật.</p>
+          </div>
+        </div>
       </div>
     </article>
   </section>
@@ -285,25 +266,82 @@ async function onSaveStatus(): Promise<void> {
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 1.1rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
 }
 
-.meta {
-  margin: 0;
+.meta-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1.5rem;
+  background: #f8fafc;
+  padding: 1.25rem;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 2rem;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 1.5rem;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 0.75rem 1.25rem;
+  font: inherit;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s;
+  border-radius: 0;
+}
+
+.tab-btn:hover {
+  color: #fff;
+  background-color: #0f172a;
+  border-bottom-color: #0f172a;
+}
+
+.active-tab {
+  color: #0f172a;
+  border-bottom-color: #0f172a;
+}
+
+.active-tab:hover {
+  color: #fff;
+}
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 dt {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   color: #64748b;
-  margin-bottom: 0.2rem;
+  margin-bottom: 0;
 }
 
 dd {
@@ -312,79 +350,66 @@ dd {
   color: #0f172a;
 }
 
+.total-price {
+  color: #0f766e;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
 .code {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
   letter-spacing: 0.04em;
 }
 
-.status-form {
+.actions-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: flex-end;
-  border-top: 1px solid #e2e8f0;
-  padding-top: 1rem;
+  justify-content: flex-end;
 }
 
-.status-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.8rem;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.status-form select {
-  font: inherit;
-  text-transform: none;
-  letter-spacing: normal;
-  color: #0f172a;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 0.45rem 0.65rem;
-  min-width: 14rem;
-  background: #fff;
-}
-
-.hint {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.9rem;
-  width: 100%;
-}
-
-.items h2,
-.history h2 {
-  margin: 0 0 0.65rem;
-  font-size: 1rem;
+.table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.95rem;
+  min-width: 500px;
 }
 
 th,
 td {
   text-align: left;
-  padding: 0.55rem 0.4rem;
+  padding: 0.85rem 1rem;
   border-bottom: 1px solid #e2e8f0;
 }
 
 th {
   color: #64748b;
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  background: #f8fafc;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
 }
 
 .history {
-  border-top: 1px solid #e2e8f0;
-  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .timeline {
@@ -393,57 +418,37 @@ th {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 1.25rem;
   position: relative;
 }
 
 .timeline li {
-  display: grid;
-  grid-template-columns: 1.1rem 1fr;
-  gap: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-left: 1.25rem;
+  border-left: 2px solid #cbd5e1;
   position: relative;
-  padding-bottom: 1rem;
 }
 
-.timeline li:not(:last-child)::before {
+.timeline li::before {
   content: '';
   position: absolute;
-  left: 0.4rem;
-  top: 1rem;
-  bottom: 0;
-  width: 2px;
-  background: #e2e8f0;
+  left: -5px;
+  top: 0.25rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
 }
+
+.event--created::before { background: #2563eb !important; }
+.event--status_changed::before { background: #7c3aed !important; }
+.event--cancelled::before { background: #64748b !important; }
+.event--delivery::before { background: #ea580c !important; }
 
 .dot {
-  width: 0.85rem;
-  height: 0.85rem;
-  border-radius: 999px;
-  margin-top: 0.25rem;
-  background: #94a3b8;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px #cbd5e1;
-  z-index: 1;
-}
-
-.event--created .dot {
-  background: #2563eb;
-  box-shadow: 0 0 0 1px #93c5fd;
-}
-
-.event--status_changed .dot {
-  background: #7c3aed;
-  box-shadow: 0 0 0 1px #c4b5fd;
-}
-
-.event--cancelled .dot {
-  background: #64748b;
-  box-shadow: 0 0 0 1px #cbd5e1;
-}
-
-.event--delivery .dot {
-  background: #ea580c;
-  box-shadow: 0 0 0 1px #fdba74;
+  display: none;
 }
 
 .event-body {
@@ -452,19 +457,18 @@ th {
 
 .event-top {
   display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
+  align-items: center;
+  gap: 1rem;
   flex-wrap: wrap;
-  align-items: baseline;
 }
 
 .event-top time {
   color: #94a3b8;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }
 
 .event-msg {
-  margin: 0.25rem 0 0;
+  margin: 0;
   color: #334155;
 }
 
@@ -485,6 +489,23 @@ th {
   margin: 0.4rem 0 0;
   color: #64748b;
   font-size: 0.88rem;
+}
+
+.reason-box {
+  color: #b91c1c;
+  background: #fef2f2;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  display: inline-block;
+  align-self: flex-start;
+}
+
+.empty-state {
+  padding: 3rem;
+  text-align: center;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px dashed #e2e8f0;
 }
 
 .empty-history {
@@ -522,5 +543,12 @@ button:disabled {
   border: 1px solid #cbd5e1;
   background: #fff;
   color: #334155;
+}
+
+.items h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  color: #0f172a;
 }
 </style>

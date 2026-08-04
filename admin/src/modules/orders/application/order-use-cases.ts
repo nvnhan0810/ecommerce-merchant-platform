@@ -1,4 +1,4 @@
-import type { ListOrdersFilter, Order, OrderRepository, OrderStatus, SimulateDeliveryInput } from '../domain/order'
+import type { ListOrdersFilter, Order, OrderRepository, SimulateDeliveryInput } from '../domain/order'
 
 export class ListOrdersUseCase {
   constructor(private readonly repo: OrderRepository) {}
@@ -13,14 +13,6 @@ export class GetOrderUseCase {
 
   execute(id: string): Promise<Order> {
     return this.repo.getById(id)
-  }
-}
-
-export class UpdateOrderStatusUseCase {
-  constructor(private readonly repo: OrderRepository) {}
-
-  execute(id: string, status: OrderStatus): Promise<Order> {
-    return this.repo.updateStatus(id, status)
   }
 }
 

@@ -170,18 +170,6 @@ export class HttpOrderRepository implements OrderRepository {
     return mapOrder(body.data)
   }
 
-  async updateStatus(id: string, status: OrderStatus): Promise<Order> {
-    const res = await apiFetch(`/api/v1/orders/${id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
-    })
-    if (!res.ok) {
-      throw new Error(await readError(res))
-    }
-    const body = (await res.json()) as { data: OrderApiItem }
-    return mapOrder(body.data)
-  }
-
   async simulateDelivery(id: string, input: SimulateDeliveryInput): Promise<Order> {
     const res = await apiFetch(`/api/v1/orders/${id}/delivery-simulate`, {
       method: 'POST',
