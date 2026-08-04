@@ -151,12 +151,6 @@ function actorLabel(name: string, email: string, role: string): string {
       </div>
 
       <div v-if="activeTab === 'details'" class="tab-content">
-        <div class="actions-row">
-          <RouterLink class="ghost" :to="`/delivery-simulator?orderId=${order.id}`">
-            Mô phỏng TMS
-          </RouterLink>
-        </div>
-
         <div class="items">
           <h2>Sản phẩm</h2>
           <div class="table-wrapper">
