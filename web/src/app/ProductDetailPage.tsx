@@ -72,6 +72,15 @@ export function ProductDetailPage(): JSX.Element {
         )}
         <div className={styles.info}>
           <h1>{data.name}</h1>
+          {data.categories.length > 0 ? (
+            <p className={styles.categories}>
+              {data.categories.map((c) => (
+                <span key={c.id} className={styles.category}>
+                  {c.name}
+                </span>
+              ))}
+            </p>
+          ) : null}
           <p className={styles.price}>{data.price.format()}</p>
           <p className={styles.stock}>
             {data.isAvailable ? `Còn ${data.stock} sản phẩm` : 'Hết hàng'}

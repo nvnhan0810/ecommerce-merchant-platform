@@ -13,19 +13,27 @@ import (
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/application/commands"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/application/queries"
 	"github.com/nvnhan0810/ecomerce-api/internal/modules/catalog/domain"
+	identitydomain "github.com/nvnhan0810/ecomerce-api/internal/modules/identity/domain"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/authctx"
 	"github.com/nvnhan0810/ecomerce-api/internal/platform/storage"
 )
 
 type CatalogHandler struct {
-	list        *queries.ListProductsHandler
-	get         *queries.GetProductHandler
-	create      *commands.CreateProductHandler
-	update      *commands.UpdateProductHandler
-	delete      *commands.DeleteProductHandler
-	uploadImage *commands.UploadProductImageHandler
-	deleteImage *commands.DeleteProductImageHandler
-	store       storage.ObjectStore
+	list               *queries.ListProductsHandler
+	get                *queries.GetProductHandler
+	create             *commands.CreateProductHandler
+	update             *commands.UpdateProductHandler
+	delete             *commands.DeleteProductHandler
+	uploadImage        *commands.UploadProductImageHandler
+	deleteImage        *commands.DeleteProductImageHandler
+	listCategories     *queries.ListCategoriesHandler
+	getCategory        *queries.GetCategoryHandler
+	createCategory     *commands.CreateCategoryHandler
+	updateCategory     *commands.UpdateCategoryHandler
+	updateCategoryStat *commands.UpdateCategoryStatusHandler
+	deleteCategory     *commands.DeleteCategoryHandler
+	removeProductCat   *commands.RemoveProductCategoryHandler
+	store              storage.ObjectStore
 }
 
 func NewCatalogHandler(
@@ -36,36 +44,63 @@ func NewCatalogHandler(
 	delete *commands.DeleteProductHandler,
 	uploadImage *commands.UploadProductImageHandler,
 	deleteImage *commands.DeleteProductImageHandler,
+	listCategories *queries.ListCategoriesHandler,
+	getCategory *queries.GetCategoryHandler,
+	createCategory *commands.CreateCategoryHandler,
+	updateCategory *commands.UpdateCategoryHandler,
+	updateCategoryStat *commands.UpdateCategoryStatusHandler,
+	deleteCategory *commands.DeleteCategoryHandler,
+	removeProductCat *commands.RemoveProductCategoryHandler,
 	store storage.ObjectStore,
 ) *CatalogHandler {
 	return &CatalogHandler{
 		list: list, get: get, create: create, update: update, delete: delete,
-		uploadImage: uploadImage, deleteImage: deleteImage, store: store,
+		uploadImage: uploadImage, deleteImage: deleteImage,
+		listCategories: listCategories, getCategory: getCategory,
+		createCategory: createCategory, updateCategory: updateCategory,
+		updateCategoryStat: updateCategoryStat, deleteCategory: deleteCategory,
+		removeProductCat: removeProductCat,
+		store: store,
 	}
+}
+
+func isAdminRequest(r *http.Request) bool {
+	claims, ok := authctx.FromContext(r.Context())
+	return ok && claims.Role == identitydomain.RoleAdmin
 }
 
 func (h *CatalogHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	items, err := h.list.Handle(r.Context(), queries.ListProductsQuery{
-		Limit:      limit,
-		Offset:     offset,
-		MerchantID: strings.TrimSpace(r.URL.Query().Get("merchant_id")),
+		Limit:                limit,
+		Offset:               offset,
+		MerchantID:           strings.TrimSpace(r.URL.Query().Get("merchant_id")),
+		CategoryID:           strings.TrimSpace(r.URL.Query().Get("category_id")),
+		IncludeAllCategories: isAdminRequest(r),
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeCatalogError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": items})
 }
 
 type productBody struct {
-	MerchantID  string `json:"merchant_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	PriceCents  int64  `json:"price_cents"`
-	Currency    string `json:"currency"`
-	Stock       int    `json:"stock"`
+	MerchantID   string    `json:"merchant_id"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	PriceCents   int64     `json:"price_cents"`
+	Currency     string    `json:"currency"`
+	Stock        int       `json:"stock"`
+	CategoryIDs  *[]string `json:"category_ids"`
+}
+
+func categoryIDsFromBody(ids *[]string) ([]string, bool) {
+	if ids == nil {
+		return nil, false
+	}
+	return *ids, true
 }
 
 func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
@@ -74,6 +109,7 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	cats, _ := categoryIDsFromBody(body.CategoryIDs)
 	res, err := h.create.Handle(r.Context(), commands.CreateProductCommand{
 		MerchantID:  body.MerchantID,
 		Name:        body.Name,
@@ -81,6 +117,7 @@ func (h *CatalogHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		PriceCents:  body.PriceCents,
 		Currency:    body.Currency,
 		Stock:       body.Stock,
+		CategoryIDs: cats,
 	})
 	if err != nil {
 		writeCatalogError(w, err)
@@ -95,7 +132,10 @@ func (h *CatalogHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 		writeCatalogError(w, err)
 		return
 	}
-	item, err := h.get.Handle(r.Context(), queries.GetProductQuery{ID: id})
+	item, err := h.get.Handle(r.Context(), queries.GetProductQuery{
+		ID:                   id,
+		IncludeAllCategories: isAdminRequest(r),
+	})
 	if err != nil {
 		writeCatalogError(w, err)
 		return
@@ -114,14 +154,17 @@ func (h *CatalogHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	cats, setCats := categoryIDsFromBody(body.CategoryIDs)
 	res, err := h.update.Handle(r.Context(), commands.UpdateProductCommand{
-		ID:          id,
-		MerchantID:  body.MerchantID,
-		Name:        body.Name,
-		Description: body.Description,
-		PriceCents:  body.PriceCents,
-		Currency:    body.Currency,
-		Stock:       body.Stock,
+		ID:            id,
+		MerchantID:    body.MerchantID,
+		Name:          body.Name,
+		Description:   body.Description,
+		PriceCents:    body.PriceCents,
+		Currency:      body.Currency,
+		Stock:         body.Stock,
+		CategoryIDs:   cats,
+		SetCategories: setCats,
 	})
 	if err != nil {
 		writeCatalogError(w, err)
@@ -144,11 +187,12 @@ func (h *CatalogHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 type merchantProductBody struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	PriceCents  int64  `json:"price_cents"`
-	Currency    string `json:"currency"`
-	Stock       int    `json:"stock"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	PriceCents  int64     `json:"price_cents"`
+	Currency    string    `json:"currency"`
+	Stock       int       `json:"stock"`
+	CategoryIDs *[]string `json:"category_ids"`
 }
 
 func merchantIDFromClaims(r *http.Request) (string, bool) {
@@ -168,10 +212,11 @@ func (h *CatalogHandler) ListMerchantProducts(w http.ResponseWriter, r *http.Req
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	items, err := h.list.Handle(r.Context(), queries.ListProductsQuery{
-		Limit:             limit,
-		Offset:            offset,
-		MerchantID:        merchantID,
-		IncludeOrderFlags: true,
+		Limit:                limit,
+		Offset:               offset,
+		MerchantID:           merchantID,
+		IncludeOrderFlags:    true,
+		IncludeAllCategories: true,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -191,13 +236,16 @@ func (h *CatalogHandler) CreateMerchantProduct(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	cats, _ := categoryIDsFromBody(body.CategoryIDs)
 	res, err := h.create.Handle(r.Context(), commands.CreateProductCommand{
-		MerchantID:  merchantID,
-		Name:        body.Name,
-		Description: body.Description,
-		PriceCents:  body.PriceCents,
-		Currency:    body.Currency,
-		Stock:       body.Stock,
+		MerchantID:      merchantID,
+		OwnerMerchantID: merchantID,
+		Name:            body.Name,
+		Description:     body.Description,
+		PriceCents:      body.PriceCents,
+		Currency:        body.Currency,
+		Stock:           body.Stock,
+		CategoryIDs:     cats,
 	})
 	if err != nil {
 		writeCatalogError(w, err)
@@ -218,9 +266,10 @@ func (h *CatalogHandler) GetMerchantProduct(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	item, err := h.get.Handle(r.Context(), queries.GetProductQuery{
-		ID:                id,
-		OwnerMerchantID:   merchantID,
-		IncludeOrderFlags: true,
+		ID:                   id,
+		OwnerMerchantID:      merchantID,
+		IncludeOrderFlags:    true,
+		IncludeAllCategories: true,
 	})
 	if err != nil {
 		writeCatalogError(w, err)
@@ -245,6 +294,7 @@ func (h *CatalogHandler) UpdateMerchantProduct(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	cats, setCats := categoryIDsFromBody(body.CategoryIDs)
 	res, err := h.update.Handle(r.Context(), commands.UpdateProductCommand{
 		ID:              id,
 		OwnerMerchantID: merchantID,
@@ -253,6 +303,8 @@ func (h *CatalogHandler) UpdateMerchantProduct(w http.ResponseWriter, r *http.Re
 		PriceCents:      body.PriceCents,
 		Currency:        body.Currency,
 		Stock:           body.Stock,
+		CategoryIDs:     cats,
+		SetCategories:   setCats,
 	})
 	if err != nil {
 		writeCatalogError(w, err)
@@ -410,6 +462,245 @@ func (h *CatalogHandler) DeleteProductImage(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{"data": res})
 }
 
+// --- Categories ---
+
+func (h *CatalogHandler) ListCategories(w http.ResponseWriter, r *http.Request) {
+	q := queries.ListCategoriesQuery{}
+	if isAdminRequest(r) {
+		q.Status = strings.TrimSpace(r.URL.Query().Get("status"))
+	} else {
+		q.ApprovedOnly = true
+	}
+	items, err := h.listCategories.Handle(r.Context(), q)
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func (h *CatalogHandler) ListMerchantCategories(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	items, err := h.listCategories.Handle(r.Context(), queries.ListCategoriesQuery{
+		MerchantAssignable: true,
+		MerchantViewerID:   merchantID,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func (h *CatalogHandler) GetCategory(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseCategoryID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	item, err := h.getCategory.Handle(r.Context(), queries.GetCategoryQuery{ID: id})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+type categoryBody struct {
+	Name string `json:"name"`
+}
+
+func (h *CatalogHandler) CreateAdminCategory(w http.ResponseWriter, r *http.Request) {
+	var body categoryBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.createCategory.Handle(r.Context(), commands.CreateCategoryCommand{
+		Name:    body.Name,
+		AsAdmin: true,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"data": res})
+}
+
+func (h *CatalogHandler) CreateMerchantCategory(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var body categoryBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.createCategory.Handle(r.Context(), commands.CreateCategoryCommand{
+		Name:                body.Name,
+		CreatedByMerchantID: merchantID,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"data": res})
+}
+
+func (h *CatalogHandler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseCategoryID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	var body categoryBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	res, err := h.updateCategory.Handle(r.Context(), commands.UpdateCategoryCommand{
+		ID:   id,
+		Name: body.Name,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
+type categoryStatusBody struct {
+	Status string `json:"status"`
+}
+
+func (h *CatalogHandler) UpdateCategoryStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseCategoryID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	var body categoryStatusBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	status, err := domain.ParseCategoryStatus(body.Status)
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	res, err := h.updateCategoryStat.Handle(r.Context(), commands.UpdateCategoryStatusCommand{
+		ID:     id,
+		Status: status,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": res})
+}
+
+func (h *CatalogHandler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseCategoryID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	if err := h.deleteCategory.Handle(r.Context(), commands.DeleteCategoryCommand{ID: id}); err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *CatalogHandler) RemoveProductCategory(w http.ResponseWriter, r *http.Request) {
+	productID, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	categoryID, err := domain.ParseCategoryID(chi.URLParam(r, "categoryId"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	if err := h.removeProductCat.Handle(r.Context(), commands.RemoveProductCategoryCommand{
+		ProductID:  productID,
+		CategoryID: categoryID,
+	}); err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *CatalogHandler) RemoveMerchantProductCategory(w http.ResponseWriter, r *http.Request) {
+	merchantID, ok := merchantIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	productID, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	categoryID, err := domain.ParseCategoryID(chi.URLParam(r, "categoryId"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	if err := h.removeProductCat.Handle(r.Context(), commands.RemoveProductCategoryCommand{
+		ProductID:       productID,
+		CategoryID:      categoryID,
+		OwnerMerchantID: merchantID,
+	}); err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *CatalogHandler) GetAdminProduct(w http.ResponseWriter, r *http.Request) {
+	id, err := domain.ParseProductID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	item, err := h.get.Handle(r.Context(), queries.GetProductQuery{
+		ID:                   id,
+		IncludeAllCategories: true,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+func (h *CatalogHandler) ListAdminProducts(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	items, err := h.list.Handle(r.Context(), queries.ListProductsQuery{
+		Limit:                limit,
+		Offset:               offset,
+		MerchantID:           strings.TrimSpace(r.URL.Query().Get("merchant_id")),
+		CategoryID:           strings.TrimSpace(r.URL.Query().Get("category_id")),
+		IncludeAllCategories: true,
+	})
+	if err != nil {
+		writeCatalogError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
 func (h *CatalogHandler) ServeMedia(w http.ResponseWriter, r *http.Request) {
 	key := strings.TrimPrefix(chi.URLParam(r, "*"), "/")
 	if key == "" {
@@ -435,15 +726,22 @@ func (h *CatalogHandler) ServeMedia(w http.ResponseWriter, r *http.Request) {
 func writeCatalogError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	switch {
-	case errors.Is(err, domain.ErrProductNotFound), errors.Is(err, domain.ErrMerchantNotFound):
+	case errors.Is(err, domain.ErrProductNotFound),
+		errors.Is(err, domain.ErrMerchantNotFound),
+		errors.Is(err, domain.ErrCategoryNotFound):
 		status = http.StatusNotFound
-	case errors.Is(err, domain.ErrProductHasOrders):
+	case errors.Is(err, domain.ErrProductHasOrders),
+		errors.Is(err, domain.ErrCategoryExists):
 		status = http.StatusConflict
 	case errors.Is(err, domain.ErrInvalidProductName),
 		errors.Is(err, domain.ErrInvalidProductPrice),
 		errors.Is(err, domain.ErrMerchantRequired),
 		errors.Is(err, domain.ErrInvalidProductID),
-		errors.Is(err, domain.ErrInvalidImage):
+		errors.Is(err, domain.ErrInvalidImage),
+		errors.Is(err, domain.ErrInvalidCategoryName),
+		errors.Is(err, domain.ErrInvalidCategoryID),
+		errors.Is(err, domain.ErrInvalidCategoryStatus),
+		errors.Is(err, domain.ErrCategoryNotAssignable):
 		status = http.StatusBadRequest
 	case errors.Is(err, storage.ErrObjectStoreDisabled):
 		status = http.StatusServiceUnavailable

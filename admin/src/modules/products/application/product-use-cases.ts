@@ -45,6 +45,14 @@ export class DeleteProductUseCase {
   }
 }
 
+export class RemoveProductCategoryUseCase {
+  constructor(private readonly repo: ProductRepository) {}
+
+  execute(productId: string, categoryId: string): Promise<void> {
+    return this.repo.removeCategory(productId, categoryId)
+  }
+}
+
 export class UploadProductImageUseCase {
   constructor(private readonly repo: ProductRepository) {}
 

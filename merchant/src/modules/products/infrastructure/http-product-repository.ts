@@ -1,10 +1,18 @@
 import {
   Product,
   type CreateProductInput,
+  type ProductCategory,
   type ProductRepository,
   type UpdateProductInput,
 } from '../domain/product'
 import { apiFetch, getAccessToken } from '@/shared/http'
+
+type CategoryApiItem = {
+  id: string
+  name: string
+  status: string
+  status_label: string
+}
 
 type ProductApiItem = {
   id: string
@@ -17,6 +25,16 @@ type ProductApiItem = {
   image_url?: string
   has_orders?: boolean
   can_delete?: boolean
+  categories?: CategoryApiItem[]
+}
+
+function mapCategories(items?: CategoryApiItem[]): ProductCategory[] {
+  return (items ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    statusLabel: c.status_label,
+  }))
 }
 
 function mapProduct(item: ProductApiItem): Product {
@@ -33,6 +51,7 @@ function mapProduct(item: ProductApiItem): Product {
     item.image_url ?? '',
     hasOrders,
     canDelete,
+    mapCategories(item.categories),
   )
 }
 
@@ -55,6 +74,7 @@ function toBody(input: CreateProductInput) {
     price_cents: input.priceCents,
     currency: input.currency,
     stock: input.stock,
+    category_ids: input.categoryIds,
   }
 }
 
@@ -107,6 +127,16 @@ export class HttpProductRepository implements ProductRepository {
 
   async remove(id: string): Promise<void> {
     const res = await apiFetch(`/api/v1/merchant/products/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      throw new Error(await readError(res))
+    }
+  }
+
+  async removeCategory(productId: string, categoryId: string): Promise<void> {
+    const res = await apiFetch(
+      `/api/v1/merchant/products/${productId}/categories/${categoryId}`,
+      { method: 'DELETE' },
+    )
     if (!res.ok) {
       throw new Error(await readError(res))
     }

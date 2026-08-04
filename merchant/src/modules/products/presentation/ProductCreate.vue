@@ -1,20 +1,46 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useMutation, useQueryClient } from '@tanstack/vue-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import {
   CreateProductUseCase,
   UploadProductImageUseCase,
 } from '../application/product-use-cases'
 import { HttpProductRepository } from '../infrastructure/http-product-repository'
+import {
+  CreateCategoryUseCase,
+  ListAssignableCategoriesUseCase,
+} from '@/modules/categories/application/category-use-cases'
+import { HttpCategoryRepository } from '@/modules/categories/infrastructure/http-category-repository'
 import ProductForm from './ProductForm.vue'
 
 const router = useRouter()
 const queryClient = useQueryClient()
 const repo = new HttpProductRepository()
+const categoryRepo = new HttpCategoryRepository()
 const createProduct = new CreateProductUseCase(repo)
 const uploadImage = new UploadProductImageUseCase(repo)
+const listCategories = new ListAssignableCategoriesUseCase(categoryRepo)
+const createCategory = new CreateCategoryUseCase(categoryRepo)
 const formError = ref('')
+const formRef = ref<{ selectCategory: (id: string) => void } | null>(null)
+
+const { data: categories, refetch: refetchCategories } = useQuery({
+  queryKey: ['merchant', 'categories'],
+  queryFn: () => listCategories.execute(),
+})
+
+const createCategoryMutation = useMutation({
+  mutationFn: (name: string) => createCategory.execute(name),
+  onSuccess: async (cat) => {
+    await queryClient.invalidateQueries({ queryKey: ['merchant', 'categories'] })
+    await refetchCategories()
+    formRef.value?.selectCategory(cat.id)
+  },
+  onError: (e: Error) => {
+    formError.value = e.message
+  },
+})
 
 const saveMutation = useMutation({
   mutationFn: async (payload: {
@@ -23,6 +49,7 @@ const saveMutation = useMutation({
     priceCents: number
     currency: string
     stock: number
+    categoryIds: string[]
     file: File | null
   }) => {
     let saved = await createProduct.execute({
@@ -31,6 +58,7 @@ const saveMutation = useMutation({
       priceCents: payload.priceCents,
       currency: payload.currency,
       stock: payload.stock,
+      categoryIds: payload.categoryIds,
     })
     if (payload.file) {
       saved = await uploadImage.execute(saved.id, payload.file)
@@ -56,11 +84,15 @@ const saveMutation = useMutation({
       </div>
     </header>
     <ProductForm
+      ref="formRef"
+      :categories="categories ?? []"
       submit-label="Tạo sản phẩm"
       :pending="saveMutation.isPending.value"
+      :creating-category="createCategoryMutation.isPending.value"
       :error="formError"
       @submit="(p) => { formError = ''; saveMutation.mutate(p) }"
       @cancel="router.push('/products')"
+      @create-category="(name) => { formError = ''; createCategoryMutation.mutate(name) }"
     />
   </section>
 </template>

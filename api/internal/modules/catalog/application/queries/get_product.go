@@ -9,13 +9,15 @@ import (
 )
 
 type GetProductQuery struct {
-	ID                domain.ProductID
-	OwnerMerchantID   string
-	IncludeOrderFlags bool
+	ID                   domain.ProductID
+	OwnerMerchantID      string
+	IncludeOrderFlags    bool
+	IncludeAllCategories bool
 }
 
 type GetProductHandler struct {
 	repo       domain.ProductRepository
+	categories domain.CategoryRepository
 	merchants  identitydomain.AccountRepository
 	geo        identitydomain.GeoRepository
 	publicBase string
@@ -23,11 +25,12 @@ type GetProductHandler struct {
 
 func NewGetProductHandler(
 	repo domain.ProductRepository,
+	categories domain.CategoryRepository,
 	merchants identitydomain.AccountRepository,
 	geo identitydomain.GeoRepository,
 	publicBase string,
 ) *GetProductHandler {
-	return &GetProductHandler{repo: repo, merchants: merchants, geo: geo, publicBase: publicBase}
+	return &GetProductHandler{repo: repo, categories: categories, merchants: merchants, geo: geo, publicBase: publicBase}
 }
 
 func (h *GetProductHandler) Handle(_ context.Context, q GetProductQuery) (ProductDTO, error) {
@@ -40,6 +43,13 @@ func (h *GetProductHandler) Handle(_ context.Context, q GetProductQuery) (Produc
 		return ProductDTO{}, domain.ErrProductNotFound
 	}
 	dto := toDTO(p, h.publicBase)
+	if h.categories != nil {
+		linked, err := h.categories.ListByProductIDs([]domain.ProductID{p.ID})
+		if err != nil {
+			return ProductDTO{}, err
+		}
+		dto.Categories = filterCategories(linked[p.ID], q.IncludeAllCategories)
+	}
 	if h.merchants != nil {
 		list := &ListProductsHandler{merchants: h.merchants, geo: h.geo, publicBase: h.publicBase}
 		list.enrichMerchant(&dto, p.MerchantID, map[string]merchantPublicInfo{})

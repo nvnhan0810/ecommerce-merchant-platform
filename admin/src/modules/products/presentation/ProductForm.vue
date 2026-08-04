@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import type { MerchantAccount } from '@/modules/merchants/domain/merchant'
+import type { Category } from '@/modules/categories/domain/category'
 import type { Product } from '../domain/product'
+import CategoryTagInput, { type CategoryTagOption } from '@/shared/CategoryTagInput.vue'
 
 const props = defineProps<{
   merchants: MerchantAccount[]
+  categories: Category[]
   initial?: Product | null
   submitLabel?: string
   pending?: boolean
   error?: string
   showRemoveImage?: boolean
+  creatingCategory?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -21,11 +25,13 @@ const emit = defineEmits<{
       priceCents: number
       currency: string
       stock: number
+      categoryIds: string[]
       file: File | null
     },
   ]
   cancel: []
   removeImage: []
+  createCategory: [name: string]
 }>()
 
 const form = reactive({
@@ -37,9 +43,30 @@ const form = reactive({
   stock: 0,
 })
 
+const selectedCategoryIds = ref<string[]>([])
+const tagInputRef = ref<{ selectCategory: (id: string) => void } | null>(null)
 const pendingFile = ref<File | null>(null)
 const localPreview = ref('')
 const existingImageUrl = ref('')
+
+const tagOptions = computed<CategoryTagOption[]>(() =>
+  props.categories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    statusLabel: c.statusLabel,
+  })),
+)
+
+const selectedTagMeta = computed<CategoryTagOption[]>(() => {
+  const fromProduct = (props.initial?.categories ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    statusLabel: c.statusLabel,
+  }))
+  return [...fromProduct, ...tagOptions.value]
+})
 
 function clearLocalPreview(): void {
   if (localPreview.value) {
@@ -59,6 +86,7 @@ function hydrate(): void {
     form.currency = props.initial.currency
     form.stock = props.initial.stock
     existingImageUrl.value = props.initial.imageUrl
+    selectedCategoryIds.value = props.initial.categories.map((c) => c.id)
   } else {
     form.merchantId = props.merchants[0]?.id ?? ''
     form.name = ''
@@ -67,6 +95,7 @@ function hydrate(): void {
     form.currency = 'VND'
     form.stock = 0
     existingImageUrl.value = ''
+    selectedCategoryIds.value = []
   }
 }
 
@@ -96,11 +125,18 @@ function onSubmit(): void {
     priceCents: Number(form.priceCents),
     currency: form.currency.trim() || 'VND',
     stock: Number(form.stock),
+    categoryIds: [...selectedCategoryIds.value],
     file: pendingFile.value,
   })
 }
 
 const previewSrc = () => localPreview.value || existingImageUrl.value
+
+function selectCategory(id: string): void {
+  tagInputRef.value?.selectCategory(id)
+}
+
+defineExpose({ selectCategory })
 </script>
 
 <template>
@@ -136,6 +172,21 @@ const previewSrc = () => localPreview.value || existingImageUrl.value
         <input v-model.number="form.stock" type="number" min="0" required />
       </label>
     </div>
+
+    <div class="field">
+      <span class="field-label">Danh mục</span>
+      <CategoryTagInput
+        ref="tagInputRef"
+        v-model="selectedCategoryIds"
+        :options="tagOptions"
+        :selected-options="selectedTagMeta"
+        :creating="creatingCategory"
+        allow-create
+        hint="Gõ để tìm tag có sẵn, Enter để chọn. Nếu chưa có, Enter hoặc chọn “Tạo mới”."
+        @create="emit('createCategory', $event)"
+      />
+    </div>
+
     <label>
       Hình ảnh
       <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" @change="onFileChange" />
@@ -179,13 +230,18 @@ const previewSrc = () => localPreview.value || existingImageUrl.value
   gap: 0.75rem;
 }
 
-label {
+label,
+.field {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
   font-size: 0.9rem;
   font-weight: 600;
   color: #334155;
+}
+
+.field-label {
+  font-weight: 600;
 }
 
 input,

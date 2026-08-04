@@ -2,10 +2,11 @@
 import { computed } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRoute, useRouter } from 'vue-router'
-import { DeleteProductUseCase, GetProductUseCase } from '../application/product-use-cases'
+import { DeleteProductUseCase, GetProductUseCase, RemoveProductCategoryUseCase } from '../application/product-use-cases'
 import { HttpProductRepository } from '../infrastructure/http-product-repository'
 import { ListMerchantsUseCase } from '@/modules/merchants/application/merchant-use-cases'
 import { HttpMerchantRepository } from '@/modules/merchants/infrastructure/http-merchant-repository'
+import type { ProductCategory } from '../domain/product'
 
 const route = useRoute()
 const router = useRouter()
@@ -13,6 +14,7 @@ const queryClient = useQueryClient()
 const repo = new HttpProductRepository()
 const getProduct = new GetProductUseCase(repo)
 const deleteProduct = new DeleteProductUseCase(repo)
+const removeCategory = new RemoveProductCategoryUseCase(repo)
 const listMerchants = new ListMerchantsUseCase(new HttpMerchantRepository())
 
 const productId = computed(() => String(route.params.id))
@@ -46,10 +48,23 @@ const deleteMutation = useMutation({
   },
 })
 
+const removeCategoryMutation = useMutation({
+  mutationFn: (categoryId: string) => removeCategory.execute(productId.value, categoryId),
+  onSuccess: async () => {
+    await queryClient.invalidateQueries({ queryKey: ['admin', 'products'] })
+    await refetch()
+  },
+})
+
 async function onDelete(): Promise<void> {
   if (!product.value) return
   if (!window.confirm(`Xóa sản phẩm "${product.value.name}"?`)) return
   await deleteMutation.mutateAsync()
+}
+
+async function onRemoveCategory(cat: ProductCategory): Promise<void> {
+  if (!window.confirm(`Gỡ danh mục "${cat.name}" khỏi sản phẩm?`)) return
+  await removeCategoryMutation.mutateAsync(cat.id)
 }
 </script>
 
@@ -98,6 +113,34 @@ async function onDelete(): Promise<void> {
         <div>
           <dt>Stock</dt>
           <dd>{{ product.stock }}</dd>
+        </div>
+        <div>
+          <dt>Danh mục</dt>
+          <dd class="cat-list">
+            <template v-if="product.categories.length">
+              <span
+                v-for="cat in product.categories"
+                :key="cat.id"
+                class="cat"
+                :data-status="cat.status"
+              >
+                <span>
+                  {{ cat.name }}
+                  <small v-if="cat.status !== 'approved'">({{ cat.statusLabel }})</small>
+                </span>
+                <button
+                  type="button"
+                  class="cat-remove"
+                  :disabled="removeCategoryMutation.isPending.value"
+                  :aria-label="`Gỡ danh mục ${cat.name}`"
+                  @click="onRemoveCategory(cat)"
+                >
+                  ×
+                </button>
+              </span>
+            </template>
+            <template v-else>—</template>
+          </dd>
         </div>
         <div>
           <dt>Mô tả</dt>
@@ -187,6 +230,47 @@ dd {
   margin: 0;
   font-size: 1rem;
   color: #0f172a;
+}
+
+.cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0.35rem 0.35rem 0;
+  padding: 0.15rem 0.35rem 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  font-size: 0.85rem;
+}
+
+.cat-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.cat[data-status='pending'] {
+  background: #fef3c7;
+}
+
+.cat[data-status='rejected'] {
+  background: #fee2e2;
+}
+
+.cat-remove {
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+  border-radius: 4px;
+}
+
+.cat-remove:hover {
+  color: #b91c1c;
+  background: rgba(185, 28, 28, 0.08);
 }
 
 a.ghost,

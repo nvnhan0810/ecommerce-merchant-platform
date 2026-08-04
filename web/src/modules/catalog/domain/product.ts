@@ -25,6 +25,11 @@ export class ProductId {
   }
 }
 
+export type ProductCategory = {
+  id: string
+  name: string
+}
+
 export class Product {
   constructor(
     readonly id: ProductId,
@@ -37,6 +42,7 @@ export class Product {
     readonly merchantDisplayName: string = '',
     readonly merchantAvatarUrl: string = '',
     readonly merchantProvinceName: string = '',
+    readonly categories: ProductCategory[] = [],
   ) {}
 
   get isAvailable(): boolean {
@@ -45,6 +51,6 @@ export class Product {
 }
 
 export interface ProductRepository {
-  list(limit?: number, merchantId?: string): Promise<Product[]>
+  list(limit?: number, merchantId?: string, categoryId?: string): Promise<Product[]>
   getById(id: string): Promise<Product>
 }

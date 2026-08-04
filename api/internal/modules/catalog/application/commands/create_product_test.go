@@ -65,6 +65,16 @@ func (r *memoryRepo) ListByMerchant(merchantID string, limit, offset int) ([]dom
 	return out[offset:end], nil
 }
 
+func (r *memoryRepo) ListByIDs(ids []domain.ProductID) ([]domain.Product, error) {
+	out := make([]domain.Product, 0, len(ids))
+	for _, id := range ids {
+		if p, ok := r.items[id]; ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
 func (r *memoryRepo) HasOrderItems(id domain.ProductID) (bool, error) {
 	return r.ordered[id], nil
 }
@@ -94,7 +104,7 @@ func (s stubMerchants) EnsureExists(merchantID string) error {
 func TestCreateProductHandler_should_create_when_valid(t *testing.T) {
 	t.Parallel()
 	repo := newMemoryRepo()
-	h := NewCreateProductHandler(repo, stubMerchants{ids: map[string]struct{}{"m1": {}}}, "https://ecomerce-api.nvnhan0810.com")
+	h := NewCreateProductHandler(repo, nil, stubMerchants{ids: map[string]struct{}{"m1": {}}}, "https://ecomerce-api.nvnhan0810.com")
 	res, err := h.Handle(context.Background(), CreateProductCommand{
 		MerchantID:  "m1",
 		Name:        "Giày chạy",
@@ -116,7 +126,7 @@ func TestCreateProductHandler_should_create_when_valid(t *testing.T) {
 
 func TestCreateProductHandler_should_reject_unknown_merchant(t *testing.T) {
 	t.Parallel()
-	h := NewCreateProductHandler(newMemoryRepo(), stubMerchants{ids: map[string]struct{}{}}, "")
+	h := NewCreateProductHandler(newMemoryRepo(), nil, stubMerchants{ids: map[string]struct{}{}}, "")
 	_, err := h.Handle(context.Background(), CreateProductCommand{
 		MerchantID: "missing", Name: "X", PriceCents: 1000, Stock: 1,
 	})
@@ -129,7 +139,7 @@ func TestUpdateAndDeleteProduct(t *testing.T) {
 	t.Parallel()
 	repo := newMemoryRepo()
 	merchants := stubMerchants{ids: map[string]struct{}{"m1": {}, "m2": {}}}
-	create := NewCreateProductHandler(repo, merchants, "")
+	create := NewCreateProductHandler(repo, nil, merchants, "")
 	created, err := create.Handle(context.Background(), CreateProductCommand{
 		MerchantID: "m1", Name: "Old", PriceCents: 10000, Stock: 2,
 	})
@@ -138,7 +148,7 @@ func TestUpdateAndDeleteProduct(t *testing.T) {
 	}
 	id := domain.ProductID(created.ID)
 
-	update := NewUpdateProductHandler(repo, merchants, "")
+	update := NewUpdateProductHandler(repo, nil, merchants, "")
 	updated, err := update.Handle(context.Background(), UpdateProductCommand{
 		ID: id, MerchantID: "m2", Name: "New", Description: "d", PriceCents: 20000, Currency: "VND", Stock: 3,
 	})
@@ -162,7 +172,7 @@ func TestDeleteProduct_should_reject_when_has_orders(t *testing.T) {
 	t.Parallel()
 	repo := newMemoryRepo()
 	merchants := stubMerchants{ids: map[string]struct{}{"m1": {}}}
-	create := NewCreateProductHandler(repo, merchants, "")
+	create := NewCreateProductHandler(repo, nil, merchants, "")
 	created, err := create.Handle(context.Background(), CreateProductCommand{
 		MerchantID: "m1", Name: "Ordered", PriceCents: 10000, Stock: 1,
 	})
@@ -185,7 +195,7 @@ func TestDeleteProduct_should_hide_other_merchant_product(t *testing.T) {
 	t.Parallel()
 	repo := newMemoryRepo()
 	merchants := stubMerchants{ids: map[string]struct{}{"m1": {}, "m2": {}}}
-	create := NewCreateProductHandler(repo, merchants, "")
+	create := NewCreateProductHandler(repo, nil, merchants, "")
 	created, err := create.Handle(context.Background(), CreateProductCommand{
 		MerchantID: "m1", Name: "Mine", PriceCents: 10000, Stock: 1,
 	})

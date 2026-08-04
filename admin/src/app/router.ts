@@ -10,6 +10,10 @@ import ProductList from '@/modules/products/presentation/ProductList.vue'
 import ProductCreate from '@/modules/products/presentation/ProductCreate.vue'
 import ProductEdit from '@/modules/products/presentation/ProductEdit.vue'
 import ProductShow from '@/modules/products/presentation/ProductShow.vue'
+import CategoryList from '@/modules/categories/presentation/CategoryList.vue'
+import CategoryCreate from '@/modules/categories/presentation/CategoryCreate.vue'
+import CategoryEdit from '@/modules/categories/presentation/CategoryEdit.vue'
+import CategoryShow from '@/modules/categories/presentation/CategoryShow.vue'
 import OrderList from '@/modules/orders/presentation/OrderList.vue'
 import OrderShow from '@/modules/orders/presentation/OrderShow.vue'
 import DeliverySimulator from '@/modules/orders/presentation/DeliverySimulator.vue'
@@ -38,6 +42,10 @@ export const router = createRouter({
         { path: 'merchants/new', component: MerchantCreate },
         { path: 'merchants/:id/edit', component: MerchantEdit },
         { path: 'merchants/:id', component: MerchantShow },
+        { path: 'categories', component: CategoryList },
+        { path: 'categories/new', component: CategoryCreate },
+        { path: 'categories/:id/edit', component: CategoryEdit },
+        { path: 'categories/:id', component: CategoryShow },
         { path: 'products', component: ProductList },
         { path: 'products/new', component: ProductCreate },
         { path: 'products/:id/edit', component: ProductEdit },

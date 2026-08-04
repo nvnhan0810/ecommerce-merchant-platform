@@ -22,6 +22,7 @@ function logout(): void {
         <RouterLink to="/">Overview</RouterLink>
         <RouterLink to="/users">Users</RouterLink>
         <RouterLink to="/merchants">Merchants</RouterLink>
+        <RouterLink to="/categories">Categories</RouterLink>
         <RouterLink to="/products">Products</RouterLink>
         <RouterLink to="/orders">Orders</RouterLink>
         <RouterLink to="/delivery-simulator">Delivery sim</RouterLink>

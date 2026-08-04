@@ -9,19 +9,45 @@ import {
 import { HttpProductRepository } from '../infrastructure/http-product-repository'
 import { ListMerchantsUseCase } from '@/modules/merchants/application/merchant-use-cases'
 import { HttpMerchantRepository } from '@/modules/merchants/infrastructure/http-merchant-repository'
+import {
+  CreateCategoryUseCase,
+  ListCategoriesUseCase,
+} from '@/modules/categories/application/category-use-cases'
+import { HttpCategoryRepository } from '@/modules/categories/infrastructure/http-category-repository'
 import ProductForm from './ProductForm.vue'
 
 const router = useRouter()
 const queryClient = useQueryClient()
 const repo = new HttpProductRepository()
+const categoryRepo = new HttpCategoryRepository()
 const createProduct = new CreateProductUseCase(repo)
 const uploadImage = new UploadProductImageUseCase(repo)
 const listMerchants = new ListMerchantsUseCase(new HttpMerchantRepository())
+const listCategories = new ListCategoriesUseCase(categoryRepo)
+const createCategory = new CreateCategoryUseCase(categoryRepo)
 const formError = ref('')
+const formRef = ref<{ selectCategory: (id: string) => void } | null>(null)
 
 const { data: merchants } = useQuery({
   queryKey: ['admin', 'merchants'],
   queryFn: () => listMerchants.execute(),
+})
+
+const { data: categories, refetch: refetchCategories } = useQuery({
+  queryKey: ['admin', 'categories'],
+  queryFn: () => listCategories.execute(),
+})
+
+const createCategoryMutation = useMutation({
+  mutationFn: (name: string) => createCategory.execute({ name }),
+  onSuccess: async (cat) => {
+    await queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] })
+    await refetchCategories()
+    formRef.value?.selectCategory(cat.id)
+  },
+  onError: (e: Error) => {
+    formError.value = e.message
+  },
 })
 
 const saveMutation = useMutation({
@@ -32,6 +58,7 @@ const saveMutation = useMutation({
     priceCents: number
     currency: string
     stock: number
+    categoryIds: string[]
     file: File | null
   }) => {
     if (!payload.merchantId) {
@@ -44,6 +71,7 @@ const saveMutation = useMutation({
       priceCents: payload.priceCents,
       currency: payload.currency,
       stock: payload.stock,
+      categoryIds: payload.categoryIds,
     })
     if (payload.file) {
       saved = await uploadImage.execute(saved.id, payload.file)
@@ -69,12 +97,16 @@ const saveMutation = useMutation({
       </div>
     </header>
     <ProductForm
+      ref="formRef"
       :merchants="merchants ?? []"
+      :categories="categories ?? []"
       submit-label="Tạo sản phẩm"
       :pending="saveMutation.isPending.value"
+      :creating-category="createCategoryMutation.isPending.value"
       :error="formError"
       @submit="(p) => { formError = ''; saveMutation.mutate(p) }"
       @cancel="router.push('/products')"
+      @create-category="(name) => { formError = ''; createCategoryMutation.mutate(name) }"
     />
   </section>
 </template>

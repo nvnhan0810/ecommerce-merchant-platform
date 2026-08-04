@@ -11,37 +11,53 @@ import (
 )
 
 type CreateProductCommand struct {
-	MerchantID  string
-	Name        string
-	Description string
-	PriceCents  int64
-	Currency    string
-	Stock       int
+	MerchantID   string
+	Name         string
+	Description  string
+	PriceCents   int64
+	Currency     string
+	Stock        int
+	CategoryIDs  []string
+	OwnerMerchantID string // when set (merchant create), used for category assignability
 }
 
 type ProductResult struct {
-	ID          string `json:"id"`
-	MerchantID  string `json:"merchant_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	PriceCents  int64  `json:"price_cents"`
-	Currency    string `json:"currency"`
-	Stock       int    `json:"stock"`
-	ImageKey    string `json:"image_key"`
-	ImageURL    string `json:"image_url"`
+	ID          string             `json:"id"`
+	MerchantID  string             `json:"merchant_id"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	PriceCents  int64              `json:"price_cents"`
+	Currency    string             `json:"currency"`
+	Stock       int                `json:"stock"`
+	ImageKey    string             `json:"image_key"`
+	ImageURL    string             `json:"image_url"`
+	Categories  []CategoryResult   `json:"categories"`
 }
 
 type CreateProductHandler struct {
 	repo       domain.ProductRepository
+	categories domain.CategoryRepository
 	merchants  domain.MerchantChecker
 	publicBase string
+	setCats    *SetProductCategoriesHandler
 }
 
-func NewCreateProductHandler(repo domain.ProductRepository, merchants domain.MerchantChecker, publicBase string) *CreateProductHandler {
-	return &CreateProductHandler{repo: repo, merchants: merchants, publicBase: publicBase}
+func NewCreateProductHandler(
+	repo domain.ProductRepository,
+	categories domain.CategoryRepository,
+	merchants domain.MerchantChecker,
+	publicBase string,
+) *CreateProductHandler {
+	return &CreateProductHandler{
+		repo:       repo,
+		categories: categories,
+		merchants:  merchants,
+		publicBase: publicBase,
+		setCats:    NewSetProductCategoriesHandler(repo, categories),
+	}
 }
 
-func (h *CreateProductHandler) Handle(_ context.Context, cmd CreateProductCommand) (ProductResult, error) {
+func (h *CreateProductHandler) Handle(ctx context.Context, cmd CreateProductCommand) (ProductResult, error) {
 	if err := h.merchants.EnsureExists(cmd.MerchantID); err != nil {
 		return ProductResult{}, err
 	}
@@ -56,7 +72,16 @@ func (h *CreateProductHandler) Handle(_ context.Context, cmd CreateProductComman
 	if err := h.repo.Save(product); err != nil {
 		return ProductResult{}, err
 	}
-	return toProductResult(product, h.publicBase), nil
+	if len(cmd.CategoryIDs) > 0 {
+		if err := h.setCats.Handle(ctx, SetProductCategoriesCommand{
+			ProductID:       product.ID,
+			CategoryIDs:     cmd.CategoryIDs,
+			OwnerMerchantID: cmd.OwnerMerchantID,
+		}); err != nil {
+			return ProductResult{}, err
+		}
+	}
+	return productResultWithCategories(product, h.categories, h.publicBase)
 }
 
 func toProductResult(product domain.Product, publicBase string) ProductResult {
@@ -70,6 +95,7 @@ func toProductResult(product domain.Product, publicBase string) ProductResult {
 		Stock:       product.Stock,
 		ImageKey:    product.ImageKey,
 		ImageURL:    mediaurl.Absolute(publicBase, product.ImageKey),
+		Categories:  []CategoryResult{},
 	}
 }
 
@@ -84,12 +110,18 @@ type UploadProductImageCommand struct {
 
 type UploadProductImageHandler struct {
 	repo       domain.ProductRepository
+	categories domain.CategoryRepository
 	store      storage.ObjectStore
 	publicBase string
 }
 
-func NewUploadProductImageHandler(repo domain.ProductRepository, store storage.ObjectStore, publicBase string) *UploadProductImageHandler {
-	return &UploadProductImageHandler{repo: repo, store: store, publicBase: publicBase}
+func NewUploadProductImageHandler(
+	repo domain.ProductRepository,
+	categories domain.CategoryRepository,
+	store storage.ObjectStore,
+	publicBase string,
+) *UploadProductImageHandler {
+	return &UploadProductImageHandler{repo: repo, categories: categories, store: store, publicBase: publicBase}
 }
 
 func (h *UploadProductImageHandler) Handle(ctx context.Context, cmd UploadProductImageCommand) (ProductResult, error) {
@@ -126,17 +158,23 @@ func (h *UploadProductImageHandler) Handle(ctx context.Context, cmd UploadProduc
 	if old != "" && old != key {
 		_ = h.store.Delete(ctx, old)
 	}
-	return toProductResult(product, h.publicBase), nil
+	return productResultWithCategories(product, h.categories, h.publicBase)
 }
 
 type DeleteProductImageHandler struct {
 	repo       domain.ProductRepository
+	categories domain.CategoryRepository
 	store      storage.ObjectStore
 	publicBase string
 }
 
-func NewDeleteProductImageHandler(repo domain.ProductRepository, store storage.ObjectStore, publicBase string) *DeleteProductImageHandler {
-	return &DeleteProductImageHandler{repo: repo, store: store, publicBase: publicBase}
+func NewDeleteProductImageHandler(
+	repo domain.ProductRepository,
+	categories domain.CategoryRepository,
+	store storage.ObjectStore,
+	publicBase string,
+) *DeleteProductImageHandler {
+	return &DeleteProductImageHandler{repo: repo, categories: categories, store: store, publicBase: publicBase}
 }
 
 type DeleteProductImageCommand struct {
@@ -160,5 +198,20 @@ func (h *DeleteProductImageHandler) Handle(ctx context.Context, cmd DeleteProduc
 	if old != "" && h.store != nil && h.store.Enabled() {
 		_ = h.store.Delete(ctx, old)
 	}
-	return toProductResult(product, h.publicBase), nil
+	return productResultWithCategories(product, h.categories, h.publicBase)
+}
+
+func productResultWithCategories(product domain.Product, categories domain.CategoryRepository, publicBase string) (ProductResult, error) {
+	res := toProductResult(product, publicBase)
+	if categories == nil {
+		return res, nil
+	}
+	linked, err := categories.ListByProductIDs([]domain.ProductID{product.ID})
+	if err != nil {
+		return ProductResult{}, err
+	}
+	for _, c := range linked[product.ID] {
+		res.Categories = append(res.Categories, toCategoryResult(c))
+	}
+	return res, nil
 }
