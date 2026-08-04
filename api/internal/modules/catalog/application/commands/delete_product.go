@@ -8,7 +8,8 @@ import (
 )
 
 type DeleteProductCommand struct {
-	ID domain.ProductID
+	ID              domain.ProductID
+	OwnerMerchantID string // when set, product must belong to this merchant
 }
 
 type DeleteProductHandler struct {
@@ -24,6 +25,16 @@ func (h *DeleteProductHandler) Handle(ctx context.Context, cmd DeleteProductComm
 	product, err := h.repo.FindByID(cmd.ID)
 	if err != nil {
 		return err
+	}
+	if cmd.OwnerMerchantID != "" && product.MerchantID != cmd.OwnerMerchantID {
+		return domain.ErrProductNotFound
+	}
+	hasOrders, err := h.repo.HasOrderItems(cmd.ID)
+	if err != nil {
+		return err
+	}
+	if hasOrders {
+		return domain.ErrProductHasOrders
 	}
 	if err := h.repo.Delete(cmd.ID); err != nil {
 		return err

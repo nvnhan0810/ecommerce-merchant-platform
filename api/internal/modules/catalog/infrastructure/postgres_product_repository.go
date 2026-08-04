@@ -73,6 +73,42 @@ func (r *PostgresProductRepository) List(limit, offset int) ([]domain.Product, e
 	return out, rows.Err()
 }
 
+func (r *PostgresProductRepository) ListByMerchant(merchantID string, limit, offset int) ([]domain.Product, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, merchant_id, name, description, price_cents, currency, stock, image_key, created_at
+		FROM products
+		WHERE merchant_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`, merchantID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.Product, 0)
+	for rows.Next() {
+		p, err := scanProduct(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (r *PostgresProductRepository) HasOrderItems(id domain.ProductID) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM order_items WHERE product_id = $1)
+	`, id).Scan(&exists)
+	return exists, err
+}
+
 func (r *PostgresProductRepository) Count() (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

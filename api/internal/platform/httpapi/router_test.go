@@ -484,3 +484,108 @@ func TestMerchantLogin_should_return_token_and_me(t *testing.T) {
 		t.Fatalf("expected 403 for merchant on admin me, got %d", adminMeRec.Code)
 	}
 }
+
+func TestMerchantProductCRUD_should_scope_and_block_delete_with_orders(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t)
+
+	unauth := httptest.NewRequest(http.MethodGet, "/api/v1/merchant/products", nil)
+	unauthRec := httptest.NewRecorder()
+	srv.ServeHTTP(unauthRec, unauth)
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", unauthRec.Code)
+	}
+
+	adminTok := adminToken(t, srv)
+	forbid := httptest.NewRequest(http.MethodGet, "/api/v1/merchant/products", nil)
+	forbid.Header.Set("Authorization", "Bearer "+adminTok)
+	forbidRec := httptest.NewRecorder()
+	srv.ServeHTTP(forbidRec, forbid)
+	if forbidRec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for admin, got %d", forbidRec.Code)
+	}
+
+	token := merchantToken(t, srv)
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/merchant/products?limit=100", nil)
+	listReq.Header.Set("Authorization", "Bearer "+token)
+	listRec := httptest.NewRecorder()
+	srv.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listRec.Code, listRec.Body.String())
+	}
+	var listPayload struct {
+		Data []struct {
+			ID        string `json:"id"`
+			Name      string `json:"name"`
+			CanDelete *bool  `json:"can_delete"`
+			HasOrders *bool  `json:"has_orders"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listPayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(listPayload.Data) == 0 {
+		t.Fatal("expected merchant products")
+	}
+
+	var orderedID string
+	for _, p := range listPayload.Data {
+		if p.CanDelete == nil || p.HasOrders == nil {
+			t.Fatalf("expected order flags on product %+v", p)
+		}
+		if *p.HasOrders && !*p.CanDelete && orderedID == "" {
+			orderedID = p.ID
+		}
+	}
+	if orderedID == "" {
+		t.Fatal("expected at least one product with orders")
+	}
+
+	blocked := httptest.NewRequest(http.MethodDelete, "/api/v1/merchant/products/"+orderedID, nil)
+	blocked.Header.Set("Authorization", "Bearer "+token)
+	blockedRec := httptest.NewRecorder()
+	srv.ServeHTTP(blockedRec, blocked)
+	if blockedRec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 delete ordered product, got %d body=%s", blockedRec.Code, blockedRec.Body.String())
+	}
+
+	createBody := bytes.NewBufferString(`{"name":"Merchant CRUD SKU","description":"own","price_cents":99000,"currency":"VND","stock":4}`)
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/merchant/products", createBody)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createRec := httptest.NewRecorder()
+	srv.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created struct {
+		Data struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Data.Name != "Merchant CRUD SKU" {
+		t.Fatalf("unexpected create: %+v", created.Data)
+	}
+
+	updateBody := bytes.NewBufferString(`{"name":"Merchant CRUD SKU 2","description":"upd","price_cents":110000,"currency":"VND","stock":2}`)
+	updateReq := httptest.NewRequest(http.MethodPut, "/api/v1/merchant/products/"+created.Data.ID, updateBody)
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.Header.Set("Authorization", "Bearer "+token)
+	updateRec := httptest.NewRecorder()
+	srv.ServeHTTP(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update status=%d body=%s", updateRec.Code, updateRec.Body.String())
+	}
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/merchant/products/"+created.Data.ID, nil)
+	delReq.Header.Set("Authorization", "Bearer "+token)
+	delRec := httptest.NewRecorder()
+	srv.ServeHTTP(delRec, delReq)
+	if delRec.Code != http.StatusNoContent {
+		t.Fatalf("delete status=%d body=%s", delRec.Code, delRec.Body.String())
+	}
+}

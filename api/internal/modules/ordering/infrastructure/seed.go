@@ -110,6 +110,11 @@ func SeedDemoOrders(
 		if err := orders.Save(order); err != nil {
 			return err
 		}
+		if marker, ok := products.(interface {
+			MarkOrdered(id catalogdomain.ProductID)
+		}); ok {
+			marker.MarkOrdered(p.ID)
+		}
 	}
 	return nil
 }
