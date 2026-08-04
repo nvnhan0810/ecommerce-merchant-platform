@@ -57,3 +57,17 @@
   margin: 0;
   color: #047857;
 }
+
+.addressLink {
+  margin: 0;
+}
+
+.addressLink a {
+  color: #0f766e;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.addressLink a:hover {
+  text-decoration: underline;
+}

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, type JSX } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { ShoppingCart, User, LogOut, Package, ChevronDown } from 'lucide-react'
+import { ShoppingCart, User, LogOut, Package, MapPin, ChevronDown } from 'lucide-react'
 import { useAuth } from '@/modules/auth/presentation/AuthProvider'
 import { useCart } from '@/modules/cart/presentation/CartProvider'
 import styles from './AppShell.module.css'
@@ -66,6 +66,10 @@ export function AppShell(): JSX.Element {
                   <Link to="/profile" className={styles.dropdownItem}>
                     <User size={16} />
                     <span>Tài khoản</span>
+                  </Link>
+                  <Link to="/addresses" className={styles.dropdownItem}>
+                    <MapPin size={16} />
+                    <span>Địa chỉ giao hàng</span>
                   </Link>
                   <Link to="/orders" className={styles.dropdownItem}>
                     <Package size={16} />

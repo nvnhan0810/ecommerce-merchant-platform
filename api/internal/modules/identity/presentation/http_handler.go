@@ -35,6 +35,9 @@ type IdentityHandler struct {
 	createAddress   *commands.CreateUserAddressHandler
 	updateAddress   *commands.UpdateUserAddressHandler
 	deleteAddress   *commands.DeleteUserAddressHandler
+	listCountries   *queries.ListCountriesHandler
+	listProvinces   *queries.ListProvincesHandler
+	listWards       *queries.ListWardsHandler
 }
 
 func NewIdentityHandler(
@@ -59,6 +62,9 @@ func NewIdentityHandler(
 	createAddress *commands.CreateUserAddressHandler,
 	updateAddress *commands.UpdateUserAddressHandler,
 	deleteAddress *commands.DeleteUserAddressHandler,
+	listCountries *queries.ListCountriesHandler,
+	listProvinces *queries.ListProvincesHandler,
+	listWards *queries.ListWardsHandler,
 ) *IdentityHandler {
 	return &IdentityHandler{
 		listUsers:      listUsers,
@@ -82,6 +88,9 @@ func NewIdentityHandler(
 		createAddress:  createAddress,
 		updateAddress:  updateAddress,
 		deleteAddress:  deleteAddress,
+		listCountries:  listCountries,
+		listProvinces:  listProvinces,
+		listWards:      listWards,
 	}
 }
 
@@ -373,7 +382,10 @@ func writeIdentityError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	switch {
 	case errors.Is(err, domain.ErrAccountNotFound),
-		errors.Is(err, domain.ErrAddressNotFound):
+		errors.Is(err, domain.ErrAddressNotFound),
+		errors.Is(err, domain.ErrCountryNotFound),
+		errors.Is(err, domain.ErrProvinceNotFound),
+		errors.Is(err, domain.ErrWardNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, domain.ErrEmailTaken):
 		status = http.StatusConflict
@@ -381,7 +393,8 @@ func writeIdentityError(w http.ResponseWriter, err error) {
 		errors.Is(err, domain.ErrWeakPassword),
 		errors.Is(err, domain.ErrInvalidAccountID),
 		errors.Is(err, domain.ErrInvalidAddressID),
-		errors.Is(err, domain.ErrMissingAddressFields):
+		errors.Is(err, domain.ErrMissingAddressFields),
+		errors.Is(err, domain.ErrInvalidGeoRef):
 		status = http.StatusBadRequest
 	case errors.Is(err, domain.ErrInvalidCredentials), errors.Is(err, domain.ErrPasswordNotSet):
 		status = http.StatusUnauthorized
@@ -400,10 +413,54 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 type createAddressBody struct {
-	RecipientName string `json:"recipient_name"`
-	PhoneNumber   string `json:"phone_number"`
-	AddressLine   string `json:"address_line"`
-	IsDefault     bool   `json:"is_default"`
+	AddressLine  string   `json:"address_line"`
+	CountryCode  string   `json:"country_code"`
+	ProvinceCode string   `json:"province_code"`
+	WardCode     string   `json:"ward_code"`
+	Latitude     *float64 `json:"latitude"`
+	Longitude    *float64 `json:"longitude"`
+	IsDefault    bool     `json:"is_default"`
+}
+
+func (h *IdentityHandler) ListCountries(w http.ResponseWriter, r *http.Request) {
+	items, err := h.listCountries.Handle()
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Country{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func (h *IdentityHandler) ListProvinces(w http.ResponseWriter, r *http.Request) {
+	countryCode := r.URL.Query().Get("country_code")
+	if countryCode == "" {
+		countryCode = "VN"
+	}
+	items, err := h.listProvinces.Handle(countryCode)
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Province{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func (h *IdentityHandler) ListWards(w http.ResponseWriter, r *http.Request) {
+	provinceCode := r.URL.Query().Get("province_code")
+	items, err := h.listWards.Handle(provinceCode)
+	if err != nil {
+		writeIdentityError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Ward{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
 }
 
 func (h *IdentityHandler) ListUserAddresses(w http.ResponseWriter, r *http.Request) {
@@ -454,11 +511,14 @@ func (h *IdentityHandler) CreateUserAddress(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	item, err := h.createAddress.Handle(commands.CreateUserAddressCommand{
-		UserID:        domain.AccountID(claims.UserID),
-		RecipientName: body.RecipientName,
-		PhoneNumber:   body.PhoneNumber,
-		AddressLine:   body.AddressLine,
-		IsDefault:     body.IsDefault,
+		UserID:       domain.AccountID(claims.UserID),
+		AddressLine:  body.AddressLine,
+		CountryCode:  body.CountryCode,
+		ProvinceCode: body.ProvinceCode,
+		WardCode:     body.WardCode,
+		Latitude:     body.Latitude,
+		Longitude:    body.Longitude,
+		IsDefault:    body.IsDefault,
 	})
 	if err != nil {
 		writeIdentityError(w, err)
@@ -484,12 +544,15 @@ func (h *IdentityHandler) UpdateUserAddress(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	item, err := h.updateAddress.Handle(commands.UpdateUserAddressCommand{
-		ID:            id,
-		UserID:        domain.AccountID(claims.UserID),
-		RecipientName: body.RecipientName,
-		PhoneNumber:   body.PhoneNumber,
-		AddressLine:   body.AddressLine,
-		IsDefault:     body.IsDefault,
+		ID:           id,
+		UserID:       domain.AccountID(claims.UserID),
+		AddressLine:  body.AddressLine,
+		CountryCode:  body.CountryCode,
+		ProvinceCode: body.ProvinceCode,
+		WardCode:     body.WardCode,
+		Latitude:     body.Latitude,
+		Longitude:    body.Longitude,
+		IsDefault:    body.IsDefault,
 	})
 	if err != nil {
 		writeIdentityError(w, err)

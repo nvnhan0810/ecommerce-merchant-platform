@@ -1,0 +1,185 @@
+.dialog {
+  width: min(560px, calc(100vw - 2rem));
+  max-height: min(85vh, 720px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+}
+
+.dialog::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0.15rem 0.4rem;
+}
+
+.closeBtn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.body {
+  padding: 1rem 1.1rem;
+  overflow: auto;
+  max-height: calc(min(85vh, 720px) - 8rem);
+}
+
+.toolbar {
+  margin-bottom: 0.75rem;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  background: #fff;
+}
+
+.option {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  cursor: pointer;
+  font-weight: 400;
+}
+
+.optionSelected {
+  /* selection shown via radio + border on parent li via :has if supported */
+}
+
+.list li:has(.optionSelected) {
+  border-color: #0f766e;
+  background: #f0fdfa;
+}
+
+.optionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.optionBody p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.92rem;
+}
+
+.optionTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.badge {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+}
+
+.optionActions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding-left: 1.5rem;
+}
+
+.optionActions button {
+  background: none;
+  border: none;
+  color: #0ea5e9;
+  padding: 0.15rem 0.25rem;
+  font-size: 0.9rem;
+}
+
+.optionActions button:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+.deleteBtn {
+  color: #ef4444 !important;
+}
+
+.hint {
+  margin: 0 0 0.75rem;
+  color: #64748b;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.85rem 1.1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.primaryBtn {
+  background: #0f172a;
+  color: #fff;
+  border: 1px solid #0f172a;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+}
+
+.primaryBtn:hover {
+  background: #1e293b;
+}
+
+.primaryBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ghostBtn {
+  background: #fff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+}
+
+.ghostBtn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}

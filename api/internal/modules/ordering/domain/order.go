@@ -20,6 +20,7 @@ var (
 	ErrMerchantConfirmOnly         = errors.New("merchant may only confirm or cancel new/confirmed orders")
 	ErrMerchantCancelReasonRequired = errors.New("cancel reason is required")
 	ErrEmptyOrderItems             = errors.New("order must have at least one item")
+	ErrMissingShippingInfo         = errors.New("shipping name, phone, and address are required")
 	ErrInvalidOrderQuantity      = errors.New("order item quantity must be greater than zero")
 	ErrInvalidOrderPrice         = errors.New("order item price must be greater than zero")
 	ErrProductMerchantMismatch   = errors.New("product does not belong to the order merchant")
@@ -573,6 +574,12 @@ func NewOrder(userID, merchantID, currency, note, shippingName, shippingPhone, s
 	if len(lines) == 0 {
 		return Order{}, ErrEmptyOrderItems
 	}
+	shippingName = strings.TrimSpace(shippingName)
+	shippingPhone = strings.TrimSpace(shippingPhone)
+	shippingAddress = strings.TrimSpace(shippingAddress)
+	if shippingName == "" || shippingPhone == "" || shippingAddress == "" {
+		return Order{}, ErrMissingShippingInfo
+	}
 
 	currency = strings.ToUpper(strings.TrimSpace(currency))
 	if currency == "" {
@@ -624,9 +631,9 @@ func NewOrder(userID, merchantID, currency, note, shippingName, shippingPhone, s
 			TotalCents:      total,
 			Note:            strings.TrimSpace(note),
 			DeliveryCarrier: DefaultDeliveryCarrier,
-			ShippingName:    strings.TrimSpace(shippingName),
-			ShippingPhone:   strings.TrimSpace(shippingPhone),
-			ShippingAddress: strings.TrimSpace(shippingAddress),
+			ShippingName:    shippingName,
+			ShippingPhone:   shippingPhone,
+			ShippingAddress: shippingAddress,
 			Items:           items,
 			CreatedAt:       now,
 			UpdatedAt:       now,

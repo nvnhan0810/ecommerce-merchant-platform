@@ -71,3 +71,86 @@ func (r *InMemoryAddressRepository) ClearDefault(userID domain.AccountID) error 
 	}
 	return nil
 }
+
+type InMemoryGeoRepository struct {
+	mu         sync.RWMutex
+	countries  []domain.Country
+	provinces  map[string]domain.Province
+	wards      map[string]domain.Ward
+}
+
+func NewInMemoryGeoRepository() *InMemoryGeoRepository {
+	lat, lon := 21.04, 105.836
+	return &InMemoryGeoRepository{
+		countries: []domain.Country{{Code: "VN", Name: "Việt Nam", NameEn: "Vietnam", IsDefault: true}},
+		provinces: map[string]domain.Province{
+			"01": {Code: "01", CountryCode: "VN", Name: "Hà Nội", NameEn: "Hanoi", Latitude: &lat, Longitude: &lon},
+		},
+		wards: map[string]domain.Ward{
+			"00004": {Code: "00004", ProvinceCode: "01", Name: "Ba Đình", NameEn: "Ba Dinh", Latitude: &lat, Longitude: &lon},
+		},
+	}
+}
+
+func (r *InMemoryGeoRepository) ListCountries() ([]domain.Country, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]domain.Country, len(r.countries))
+	copy(out, r.countries)
+	return out, nil
+}
+
+func (r *InMemoryGeoRepository) DefaultCountry() (domain.Country, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, c := range r.countries {
+		if c.IsDefault {
+			return c, nil
+		}
+	}
+	return domain.Country{}, domain.ErrCountryNotFound
+}
+
+func (r *InMemoryGeoRepository) ListProvinces(countryCode string) ([]domain.Province, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var items []domain.Province
+	for _, p := range r.provinces {
+		if p.CountryCode == countryCode {
+			items = append(items, p)
+		}
+	}
+	return items, nil
+}
+
+func (r *InMemoryGeoRepository) ListWards(provinceCode string) ([]domain.Ward, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var items []domain.Ward
+	for _, w := range r.wards {
+		if w.ProvinceCode == provinceCode {
+			items = append(items, w)
+		}
+	}
+	return items, nil
+}
+
+func (r *InMemoryGeoRepository) GetProvince(code string) (domain.Province, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, ok := r.provinces[code]
+	if !ok {
+		return domain.Province{}, domain.ErrProvinceNotFound
+	}
+	return p, nil
+}
+
+func (r *InMemoryGeoRepository) GetWard(code string) (domain.Ward, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	w, ok := r.wards[code]
+	if !ok {
+		return domain.Ward{}, domain.ErrWardNotFound
+	}
+	return w, nil
+}

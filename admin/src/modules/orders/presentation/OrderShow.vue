@@ -90,14 +90,6 @@ function actorLabel(name: string, email: string, role: string): string {
     <article v-else-if="order" class="detail">
       <div class="meta-grid">
         <div class="meta-item">
-          <dt>Mã vận đơn</dt>
-          <dd class="code">{{ order.deliveryTrackingCode || '—' }}</dd>
-        </div>
-        <div class="meta-item">
-          <dt>Đơn vị vận chuyển</dt>
-          <dd>{{ order.deliveryCarrier || 'internal' }}</dd>
-        </div>
-        <div class="meta-item">
           <dt>Tổng tiền</dt>
           <dd class="total-price">{{ formatMoney(order.totalCents, order.currency) }}</dd>
         </div>
@@ -124,9 +116,23 @@ function actorLabel(name: string, email: string, role: string): string {
       </div>
 
       <div class="address-box">
-        <h3>Địa chỉ nhận hàng</h3>
-        <p><strong>{{ order.shippingName || '—' }}</strong> - {{ order.shippingPhone || '—' }}</p>
-        <p>{{ order.shippingAddress || '—' }}</p>
+        <h3>Thông tin giao hàng</h3>
+        <dl class="shipping-dl">
+          <div class="shipping-row">
+            <div>
+              <dt>Người nhận</dt>
+              <dd>{{ order.shippingName || '—' }}</dd>
+            </div>
+            <div>
+              <dt>Số điện thoại</dt>
+              <dd>{{ order.shippingPhone || '—' }}</dd>
+            </div>
+          </div>
+          <div>
+            <dt>Địa chỉ</dt>
+            <dd>{{ order.shippingAddress || '—' }}</dd>
+          </div>
+        </dl>
       </div>
 
       <div class="tabs">
@@ -183,7 +189,21 @@ function actorLabel(name: string, email: string, role: string): string {
       </div>
 
       <div v-if="activeTab === 'tracking'" class="tab-content">
+        <section class="carrier-section">
+          <h2>Thông tin vận chuyển</h2>
+          <dl class="shipping-dl">
+            <div>
+              <dt>Mã vận đơn</dt>
+              <dd class="code">{{ order.deliveryTrackingCode || '—' }}</dd>
+            </div>
+            <div>
+              <dt>Đơn vị vận chuyển</dt>
+              <dd>{{ order.deliveryCarrier || 'internal' }}</dd>
+            </div>
+          </dl>
+        </section>
         <div class="history">
+          <h2>Lịch trình</h2>
           <ol v-if="deliveryEvents.length" class="timeline">
             <li v-for="ev in deliveryEvents" :key="ev.id" class="event--delivery">
               <div class="dot" aria-hidden="true" />
@@ -200,9 +220,7 @@ function actorLabel(name: string, email: string, role: string): string {
               </div>
             </li>
           </ol>
-          <div v-else class="empty-state">
-            <p class="empty-history">Chưa có sự kiện vận chuyển.</p>
-          </div>
+          <p v-else class="empty-history">Chưa có sự kiện vận chuyển.</p>
         </div>
       </div>
 
@@ -280,33 +298,74 @@ function actorLabel(name: string, email: string, role: string): string {
 .meta-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1.5rem;
-  background: #f8fafc;
-  padding: 1.25rem;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  margin-bottom: 1rem;
+  gap: 1.25rem;
+  padding: 0 0 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 1.25rem;
 }
 
 .address-box {
-  background: #f8fafc;
-  padding: 1.25rem;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  margin-bottom: 2rem;
+  padding: 0 0 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 1.5rem;
 }
 
 .address-box h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: #64748b;
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  color: #0f172a;
 }
 
-.address-box p {
-  margin: 0.25rem 0;
+.carrier-section {
+  margin-bottom: 1.5rem;
+}
+
+.carrier-section h2,
+.history h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.shipping-dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.shipping-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.shipping-dl > div:not(.shipping-row),
+.shipping-row > div {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  gap: 0.5rem;
+}
+
+.shipping-dl dt {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.shipping-dl dd {
+  margin: 0;
   color: #0f172a;
+}
+
+@media (max-width: 640px) {
+  .shipping-row {
+    grid-template-columns: 1fr;
+  }
+
+  .shipping-dl > div:not(.shipping-row),
+  .shipping-row > div {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
 }
 
 .meta-item {
@@ -419,7 +478,6 @@ th {
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  background: #f8fafc;
 }
 
 tr:last-child td {
@@ -528,11 +586,8 @@ tr:last-child td {
 }
 
 .empty-state {
-  padding: 3rem;
-  text-align: center;
-  background: #f8fafc;
-  border-radius: 10px;
-  border: 1px dashed #e2e8f0;
+  padding: 1.5rem 0;
+  text-align: left;
 }
 
 .empty-history {

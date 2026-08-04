@@ -46,6 +46,10 @@ func NewRouter(deps Dependencies) http.Handler {
 		api.Get("/products/{id}", deps.Catalog.GetProduct)
 		api.Get("/media/*", deps.Catalog.ServeMedia)
 
+		api.Get("/countries", deps.Identity.ListCountries)
+		api.Get("/provinces", deps.Identity.ListProvinces)
+		api.Get("/wards", deps.Identity.ListWards)
+
 		api.Post("/auth/login", deps.Identity.Login)
 		api.Post("/auth/merchant/login", deps.Identity.MerchantLogin)
 		api.Post("/auth/user/login", deps.Identity.UserLogin)

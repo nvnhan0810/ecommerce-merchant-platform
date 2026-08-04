@@ -383,6 +383,7 @@ func writeOrderingError(w http.ResponseWriter, err error) {
 		errors.Is(err, domain.ErrMerchantConfirmOnly),
 		errors.Is(err, domain.ErrMerchantCancelReasonRequired),
 		errors.Is(err, domain.ErrEmptyOrderItems),
+		errors.Is(err, domain.ErrMissingShippingInfo),
 		errors.Is(err, domain.ErrInvalidOrderQuantity),
 		errors.Is(err, domain.ErrInvalidOrderPrice),
 		errors.Is(err, domain.ErrUserRequired),
