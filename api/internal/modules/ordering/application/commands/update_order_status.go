@@ -11,6 +11,7 @@ import (
 type UpdateOrderStatusCommand struct {
 	ID              domain.OrderID
 	Status          string
+	Reason          string
 	Actor           domain.Actor
 	OwnerMerchantID string // when set, order must belong to this merchant
 }
@@ -43,8 +44,30 @@ func (h *UpdateOrderStatusHandler) Handle(_ context.Context, cmd UpdateOrderStat
 	if strings.TrimSpace(actor.Role) == "" {
 		actor.Role = "admin"
 	}
-	if err := order.ChangeStatus(status, actor); err != nil {
-		return queries.OrderDTO{}, err
+	if owner != "" {
+		switch status {
+		case domain.StatusConfirmed:
+			if err := order.MerchantConfirm(actor); err != nil {
+				return queries.OrderDTO{}, err
+			}
+		case domain.StatusCancelled:
+			if err := order.MerchantCancel(actor, cmd.Reason); err != nil {
+				return queries.OrderDTO{}, err
+			}
+		default:
+			return queries.OrderDTO{}, domain.ErrMerchantConfirmOnly
+		}
+	} else {
+		from := order.Status
+		if err := order.ChangeStatus(status, actor); err != nil {
+			return queries.OrderDTO{}, err
+		}
+		// Admin confirm also auto-dispatches internal shipment.
+		if from == domain.StatusNew && status == domain.StatusConfirmed {
+			if err := order.DispatchInternalShipment(); err != nil {
+				return queries.OrderDTO{}, err
+			}
+		}
 	}
 	if err := h.repo.Save(order); err != nil {
 		return queries.OrderDTO{}, err

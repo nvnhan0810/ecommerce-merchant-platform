@@ -4,6 +4,8 @@ export type OrderStatus =
   | 'confirmed'
   | 'shipping'
   | 'succeeded'
+  | 'returning'
+  | 'returned'
   | 'failed'
   | 'cancelled'
 
@@ -15,6 +17,8 @@ export const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
   { value: 'confirmed', label: 'Đã xác nhận' },
   { value: 'shipping', label: 'Đang vận chuyển' },
   { value: 'succeeded', label: 'Thành công' },
+  { value: 'returning', label: 'Đang hoàn hàng' },
+  { value: 'returned', label: 'Đã hoàn hàng' },
   { value: 'failed', label: 'Thất bại' },
   { value: 'cancelled', label: 'Huỷ' },
 ]
@@ -48,6 +52,21 @@ export class OrderEvent {
   ) {}
 }
 
+export class DeliveryEvent {
+  constructor(
+    readonly id: string,
+    readonly eventId: string,
+    readonly deliveryTrackingCode: string,
+    readonly statusCode: string,
+    readonly statusLabel: string,
+    readonly message: string,
+    readonly reason: string,
+    readonly occurredAt: string,
+    readonly source: string,
+    readonly createdAt: string,
+  ) {}
+}
+
 export class Order {
   constructor(
     readonly id: string,
@@ -59,8 +78,11 @@ export class Order {
     readonly currency: string,
     readonly totalCents: number,
     readonly note: string,
+    readonly deliveryTrackingCode: string,
+    readonly deliveryCarrier: string,
     readonly items: OrderItem[],
     readonly history: OrderEvent[],
+    readonly deliveryEvents: DeliveryEvent[],
     readonly createdAt: string,
     readonly updatedAt: string,
   ) {}
@@ -74,5 +96,5 @@ export type ListOrdersFilter = {
 export interface OrderRepository {
   list(filter?: ListOrdersFilter): Promise<Order[]>
   getById(id: string): Promise<Order>
-  updateStatus(id: string, status: OrderStatus): Promise<Order>
+  updateStatus(id: string, status: OrderStatus, reason?: string): Promise<Order>
 }

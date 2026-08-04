@@ -2,6 +2,7 @@ package queries
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -34,20 +35,37 @@ type OrderEventDTO struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
+type DeliveryEventDTO struct {
+	ID                   string          `json:"id"`
+	EventID              string          `json:"event_id,omitempty"`
+	DeliveryTrackingCode string          `json:"delivery_tracking_code"`
+	StatusCode           string          `json:"status_code"`
+	StatusLabel          string          `json:"status_label"`
+	Message              string          `json:"message"`
+	Reason               string          `json:"reason,omitempty"`
+	OccurredAt           time.Time       `json:"occurred_at"`
+	Source               string          `json:"source"`
+	RawPayload           json.RawMessage `json:"raw_payload,omitempty"`
+	CreatedAt            time.Time       `json:"created_at"`
+}
+
 type OrderDTO struct {
-	ID          string          `json:"id"`
-	Code        string          `json:"code"`
-	UserID      string          `json:"user_id"`
-	MerchantID  string          `json:"merchant_id"`
-	Status      string          `json:"status"`
-	StatusLabel string          `json:"status_label"`
-	Currency    string          `json:"currency"`
-	TotalCents  int64           `json:"total_cents"`
-	Note        string          `json:"note"`
-	Items       []OrderItemDTO  `json:"items"`
-	History     []OrderEventDTO `json:"history"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID                   string             `json:"id"`
+	Code                 string             `json:"code"`
+	UserID               string             `json:"user_id"`
+	MerchantID           string             `json:"merchant_id"`
+	Status               string             `json:"status"`
+	StatusLabel          string             `json:"status_label"`
+	Currency             string             `json:"currency"`
+	TotalCents           int64              `json:"total_cents"`
+	Note                 string             `json:"note"`
+	DeliveryTrackingCode string             `json:"deliveryTrackingCode,omitempty"`
+	DeliveryCarrier      string             `json:"deliveryCarrier"`
+	Items                []OrderItemDTO     `json:"items"`
+	History              []OrderEventDTO    `json:"history"`
+	DeliveryEvents       []DeliveryEventDTO `json:"delivery_events"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
 }
 
 func ToDTO(o domain.Order) OrderDTO {
@@ -74,20 +92,33 @@ func ToDTOWithHistory(o domain.Order, includeHistory bool) OrderDTO {
 			history = append(history, toEventDTO(ev))
 		}
 	}
+	deliveryEvents := make([]DeliveryEventDTO, 0, len(o.DeliveryEvents))
+	if includeHistory {
+		for _, ev := range o.DeliveryEvents {
+			deliveryEvents = append(deliveryEvents, toDeliveryEventDTO(ev))
+		}
+	}
+	carrier := o.DeliveryCarrier
+	if carrier == "" {
+		carrier = domain.DefaultDeliveryCarrier
+	}
 	return OrderDTO{
-		ID:          string(o.ID),
-		Code:        o.Code,
-		UserID:      o.UserID,
-		MerchantID:  o.MerchantID,
-		Status:      string(o.Status),
-		StatusLabel: o.Status.LabelVI(),
-		Currency:    o.Currency,
-		TotalCents:  o.TotalCents,
-		Note:        o.Note,
-		Items:       items,
-		History:     history,
-		CreatedAt:   o.CreatedAt,
-		UpdatedAt:   o.UpdatedAt,
+		ID:                   string(o.ID),
+		Code:                 o.Code,
+		UserID:               o.UserID,
+		MerchantID:           o.MerchantID,
+		Status:               string(o.Status),
+		StatusLabel:          o.Status.LabelVI(),
+		Currency:             o.Currency,
+		TotalCents:           o.TotalCents,
+		Note:                 o.Note,
+		DeliveryTrackingCode: o.DeliveryTrackingCode,
+		DeliveryCarrier:      carrier,
+		Items:                items,
+		History:              history,
+		DeliveryEvents:       deliveryEvents,
+		CreatedAt:            o.CreatedAt,
+		UpdatedAt:            o.UpdatedAt,
 	}
 }
 
@@ -112,6 +143,22 @@ func toEventDTO(ev domain.OrderEvent) OrderEventDTO {
 		dto.ToStatusLabel = ev.ToStatus.LabelVI()
 	}
 	return dto
+}
+
+func toDeliveryEventDTO(ev domain.DeliveryEvent) DeliveryEventDTO {
+	return DeliveryEventDTO{
+		ID:                   string(ev.ID),
+		EventID:              ev.EventID,
+		DeliveryTrackingCode: ev.DeliveryTrackingCode,
+		StatusCode:           string(ev.StatusCode),
+		StatusLabel:          ev.StatusLabel,
+		Message:              ev.Message,
+		Reason:               ev.Reason,
+		OccurredAt:           ev.OccurredAt,
+		Source:               ev.Source,
+		RawPayload:           ev.RawPayload,
+		CreatedAt:            ev.CreatedAt,
+	}
 }
 
 type ListOrdersQuery struct {

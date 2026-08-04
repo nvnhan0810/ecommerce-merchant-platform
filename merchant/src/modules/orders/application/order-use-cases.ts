@@ -19,7 +19,7 @@ export class GetOrderUseCase {
 export class UpdateOrderStatusUseCase {
   constructor(private readonly repo: OrderRepository) {}
 
-  execute(id: string, status: OrderStatus): Promise<Order> {
-    return this.repo.updateStatus(id, status)
+  execute(id: string, status: OrderStatus, reason?: string): Promise<Order> {
+    return this.repo.updateStatus(id, status, reason)
   }
 }

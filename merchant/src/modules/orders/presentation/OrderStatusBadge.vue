@@ -60,6 +60,18 @@ const resolvedLabel = (): string => {
   border-color: #a7f3d0;
 }
 
+.badge--returning {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.badge--returned {
+  background: #f8fafc;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
 .badge--failed {
   background: #fef2f2;
   color: #b91c1c;

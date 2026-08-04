@@ -9,6 +9,7 @@ import ProductEdit from '@/modules/products/presentation/ProductEdit.vue'
 import ProductShow from '@/modules/products/presentation/ProductShow.vue'
 import OrderList from '@/modules/orders/presentation/OrderList.vue'
 import OrderShow from '@/modules/orders/presentation/OrderShow.vue'
+import DeliverySimulator from '@/modules/orders/presentation/DeliverySimulator.vue'
 import LoginPage from '@/modules/auth/presentation/LoginPage.vue'
 import { GetStoredSessionUseCase } from '@/modules/auth/application/auth-use-cases'
 import { LocalStorageSessionStore } from '@/modules/auth/infrastructure/local-storage-session-store'
@@ -37,6 +38,7 @@ export const router = createRouter({
         { path: 'products/:id', component: ProductShow },
         { path: 'orders', component: OrderList },
         { path: 'orders/:id', component: OrderShow },
+        { path: 'delivery-simulator', component: DeliverySimulator },
       ],
     },
   ],

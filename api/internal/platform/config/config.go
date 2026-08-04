@@ -23,6 +23,7 @@ type Config struct {
 	JWTSecret              string
 	JWTTTL                 time.Duration
 	AdminBootstrapPassword string
+	DeliveryWebhookSecret  string
 
 	S3            storage.Config
 	PublicAPIBase string
@@ -52,6 +53,7 @@ func Load() Config {
 		JWTSecret:              getenv("JWT_SECRET", "ecomerce-dev-jwt-secret-change-me"),
 		JWTTTL:                 time.Duration(ttlHours) * time.Hour,
 		AdminBootstrapPassword: getenv("ADMIN_BOOTSTRAP_PASSWORD", "Admin@123456"),
+		DeliveryWebhookSecret:  getenv("DELIVERY_WEBHOOK_SECRET", "delivery-webhook-dev-secret"),
 		S3: storage.Config{
 			Endpoint:     getenv("S3_ENDPOINT", "http://seaweedfs-s3.seaweedfs.svc.cluster.local:8333"),
 			Region:       getenv("S3_REGION", "us-east-1"),

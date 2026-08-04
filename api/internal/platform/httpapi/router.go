@@ -33,7 +33,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   deps.Config.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Webhook-Secret"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
@@ -49,6 +49,8 @@ func NewRouter(deps Dependencies) http.Handler {
 		api.Post("/auth/login", deps.Identity.Login)
 		api.Post("/auth/merchant/login", deps.Identity.MerchantLogin)
 		api.Post("/auth/user/login", deps.Identity.UserLogin)
+
+		api.Post("/webhooks/delivery", deps.Ordering.DeliveryWebhook)
 
 		api.Group(func(user chi.Router) {
 			user.Use(BearerAuth(deps.Tokens))
@@ -98,6 +100,7 @@ func NewRouter(deps Dependencies) http.Handler {
 			admin.Get("/orders", deps.Ordering.ListOrders)
 			admin.Get("/orders/{id}", deps.Ordering.GetOrder)
 			admin.Patch("/orders/{id}/status", deps.Ordering.UpdateOrderStatus)
+			admin.Post("/orders/{id}/delivery-simulate", deps.Ordering.SimulateDelivery)
 		})
 	})
 

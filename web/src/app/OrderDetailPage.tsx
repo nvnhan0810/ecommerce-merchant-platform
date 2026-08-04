@@ -57,6 +57,10 @@ export function OrderDetailPage(): JSX.Element {
           <p>
             Trạng thái: <strong>{data.statusLabel}</strong>
           </p>
+          <p>
+            Mã vận đơn: <strong className={styles.codeInline}>{data.deliveryTrackingCode || '—'}</strong>
+          </p>
+          <p>Đơn vị vận chuyển: {data.deliveryCarrier || 'internal'}</p>
           <p>Tổng: {formatMoney(data.totalCents, data.currency)}</p>
           <p>Tạo lúc: {formatDate(data.createdAt)}</p>
           <p>Ghi chú: {data.note || '—'}</p>
@@ -79,6 +83,21 @@ export function OrderDetailPage(): JSX.Element {
               ))}
             </tbody>
           </table>
+          <h2>Timeline vận chuyển</h2>
+          {data.deliveryEvents.length === 0 ? (
+            <p className={styles.muted}>Chưa có sự kiện vận chuyển.</p>
+          ) : (
+            <ol className={styles.timeline}>
+              {data.deliveryEvents.map((ev) => (
+                <li key={ev.id}>
+                  <strong>{ev.statusLabel || ev.statusCode}</strong>
+                  <span className={styles.muted}>{formatDate(ev.occurredAt)}</span>
+                  <p>{ev.message}</p>
+                  {ev.reason ? <p className={styles.muted}>Lý do: {ev.reason}</p> : null}
+                </li>
+              ))}
+            </ol>
+          )}
         </article>
       )}
     </section>

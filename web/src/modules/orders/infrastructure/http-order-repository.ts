@@ -1,4 +1,11 @@
-import { Order, OrderItem, type CreateOrderItemInput, type OrderRepository, type OrderStatus } from '../domain/order'
+import {
+  DeliveryEvent,
+  Order,
+  OrderItem,
+  type CreateOrderItemInput,
+  type OrderRepository,
+  type OrderStatus,
+} from '../domain/order'
 import { apiFetch } from '@/shared/http'
 
 type OrderItemApi = {
@@ -10,6 +17,17 @@ type OrderItemApi = {
   line_total_cents: number
 }
 
+type DeliveryEventApi = {
+  id: string
+  delivery_tracking_code: string
+  status_code: string
+  status_label: string
+  message: string
+  reason?: string
+  occurred_at: string
+  source: string
+}
+
 type OrderApiItem = {
   id: string
   code: string
@@ -18,7 +36,11 @@ type OrderApiItem = {
   currency: string
   total_cents: number
   note: string
+  deliveryTrackingCode?: string
+  deliveryCarrier?: string
   items: OrderItemApi[]
+  delivery_events?: DeliveryEventApi[]
+  history?: unknown[]
   created_at: string
   updated_at: string
 }
@@ -32,6 +54,8 @@ function mapOrder(item: OrderApiItem): Order {
     item.currency,
     item.total_cents,
     item.note ?? '',
+    item.deliveryTrackingCode ?? '',
+    item.deliveryCarrier ?? 'internal',
     (item.items ?? []).map(
       (line) =>
         new OrderItem(
@@ -41,6 +65,19 @@ function mapOrder(item: OrderApiItem): Order {
           line.unit_price_cents,
           line.quantity,
           line.line_total_cents,
+        ),
+    ),
+    (item.delivery_events ?? []).map(
+      (ev) =>
+        new DeliveryEvent(
+          ev.id,
+          ev.delivery_tracking_code ?? '',
+          ev.status_code,
+          ev.status_label,
+          ev.message,
+          ev.reason ?? '',
+          ev.occurred_at,
+          ev.source ?? '',
         ),
     ),
     item.created_at,
