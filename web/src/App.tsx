@@ -12,6 +12,7 @@ import { PaymentResultPage } from './app/PaymentResultPage'
 import { ProductDetailPage } from './app/ProductDetailPage'
 import { ProfilePage } from './app/ProfilePage'
 import { AddressesPage } from './app/AddressesPage'
+import { UserGuidePage } from './app/UserGuidePage'
 
 export default function App(): JSX.Element {
   return (
@@ -27,6 +28,7 @@ export default function App(): JSX.Element {
         <Route path="orders/:id" element={<OrderDetailPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="addresses" element={<AddressesPage />} />
+        <Route path="huong-dan" element={<UserGuidePage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

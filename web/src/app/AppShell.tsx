@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type JSX } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { ShoppingCart, User, LogOut, Package, MapPin, ChevronDown } from 'lucide-react'
 import { useAuth } from '@/modules/auth/presentation/AuthProvider'
 import { useCart } from '@/modules/cart/presentation/CartProvider'
@@ -11,6 +11,7 @@ export function AppShell(): JSX.Element {
   const location = useLocation()
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const wideMain = location.pathname === '/huong-dan'
 
   useEffect(() => {
     setIsUserMenuOpen(false)
@@ -34,7 +35,10 @@ export function AppShell(): JSX.Element {
             Ecomerce
           </Link>
           <nav className={styles.mainNav} aria-label="Chính">
-            <Link to="/">Sản phẩm</Link>
+            <NavLink to="/" end>
+              Sản phẩm
+            </NavLink>
+            <NavLink to="/huong-dan">Hướng dẫn sử dụng</NavLink>
           </nav>
         </div>
         
@@ -88,7 +92,7 @@ export function AppShell(): JSX.Element {
           )}
         </div>
       </header>
-      <main className={styles.main}>
+      <main className={`${styles.main} ${wideMain ? styles.mainWide : ''}`}>
         <Outlet />
       </main>
       <footer className={styles.footer}>

@@ -55,7 +55,8 @@
   font-size: 0.95rem;
 }
 
-.mainNav a:hover {
+.mainNav a:hover,
+.mainNav a[aria-current='page'] {
   color: #0f766e;
 }
 
@@ -203,6 +204,10 @@
   width: min(1100px, 100%);
   margin: 0 auto;
   padding: 2rem 1.25rem 3rem;
+}
+
+.mainWide {
+  width: min(1240px, 100%);
 }
 
 .footer {
