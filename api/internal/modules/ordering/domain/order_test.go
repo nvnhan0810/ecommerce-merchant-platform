@@ -24,15 +24,15 @@ func TestParseOrderStatus(t *testing.T) {
 
 func TestNewOrder_requiresUserMerchantAndItems(t *testing.T) {
 	t.Parallel()
-	_, err := NewOrder("", "m1", "VND", "", nil)
+	_, err := NewOrder("", "m1", "VND", "", "", "", "", nil)
 	if err != ErrUserRequired {
 		t.Fatalf("expected ErrUserRequired, got %v", err)
 	}
-	_, err = NewOrder("u1", "", "VND", "", []OrderLineInput{{ProductID: "p", MerchantID: "m1", UnitPriceCents: 1, Quantity: 1}})
+	_, err = NewOrder("u1", "", "VND", "", "", "", "", []OrderLineInput{{ProductID: "p", MerchantID: "m1", UnitPriceCents: 1, Quantity: 1}})
 	if err != ErrMerchantRequired {
 		t.Fatalf("expected ErrMerchantRequired, got %v", err)
 	}
-	_, err = NewOrder("u1", "m1", "VND", "", nil)
+	_, err = NewOrder("u1", "m1", "VND", "", "", "", "", nil)
 	if err != ErrEmptyOrderItems {
 		t.Fatalf("expected ErrEmptyOrderItems, got %v", err)
 	}
@@ -40,7 +40,7 @@ func TestNewOrder_requiresUserMerchantAndItems(t *testing.T) {
 
 func TestNewOrder_rejectsProductFromOtherMerchant(t *testing.T) {
 	t.Parallel()
-	_, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+	_, err := NewOrder("u1", "m1", "VND", "", "", "", "", []OrderLineInput{
 		{ProductID: "p1", ProductName: "A", MerchantID: "m2", UnitPriceCents: 1000, Quantity: 1},
 	})
 	if err != ErrProductMerchantMismatch {
@@ -68,7 +68,7 @@ func TestNewOrderCode_and_ParseOrderCode(t *testing.T) {
 
 func TestNewOrder_ok(t *testing.T) {
 	t.Parallel()
-	o, err := NewOrder("u1", "m1", "vnd", "note", []OrderLineInput{
+	o, err := NewOrder("u1", "m1", "vnd", "note", "Name", "Phone", "Addr", []OrderLineInput{
 		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 10000, Quantity: 2},
 		{ProductID: "p2", ProductName: "Quần", MerchantID: "m1", UnitPriceCents: 20000, Quantity: 1},
 	})
@@ -133,7 +133,7 @@ func TestMapDeliveryToOrderStatus(t *testing.T) {
 
 func TestApplyDeliveryEvent_setsTrackingAndStatus(t *testing.T) {
 	t.Parallel()
-	o, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+	o, err := NewOrder("u1", "m1", "VND", "", "", "", "", []OrderLineInput{
 		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 1000, Quantity: 1},
 	})
 	if err != nil {
@@ -194,7 +194,7 @@ func TestApplyDeliveryEvent_setsTrackingAndStatus(t *testing.T) {
 
 func TestMerchantConfirm(t *testing.T) {
 	t.Parallel()
-	o, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+	o, err := NewOrder("u1", "m1", "VND", "", "", "", "", []OrderLineInput{
 		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 1000, Quantity: 1},
 	})
 	if err != nil {
@@ -225,7 +225,7 @@ func TestMerchantConfirm(t *testing.T) {
 
 func TestMerchantCancel_requiresReason(t *testing.T) {
 	t.Parallel()
-	o, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+	o, err := NewOrder("u1", "m1", "VND", "", "", "", "", []OrderLineInput{
 		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 1000, Quantity: 1},
 	})
 	if err != nil {
@@ -248,7 +248,7 @@ func TestMerchantCancel_requiresReason(t *testing.T) {
 
 func TestMerchantCancel_fromConfirmed(t *testing.T) {
 	t.Parallel()
-	o, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+	o, err := NewOrder("u1", "m1", "VND", "", "", "", "", []OrderLineInput{
 		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 1000, Quantity: 1},
 	})
 	if err != nil {
@@ -265,7 +265,7 @@ func TestMerchantCancel_fromConfirmed(t *testing.T) {
 		t.Fatalf("status=%s", o.Status)
 	}
 
-	shipping, err := NewOrder("u1", "m1", "VND", "", []OrderLineInput{
+	shipping, err := NewOrder("u1", "m1", "VND", "", "", "", "", []OrderLineInput{
 		{ProductID: "p1", ProductName: "Áo", MerchantID: "m1", UnitPriceCents: 1000, Quantity: 1},
 	})
 	if err != nil {

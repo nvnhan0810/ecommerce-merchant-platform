@@ -60,6 +60,9 @@ type OrderApiItem = {
   note: string
   deliveryTrackingCode?: string
   deliveryCarrier?: string
+  shipping_name?: string
+  shipping_phone?: string
+  shipping_address?: string
   items: OrderItemApi[]
   history?: OrderEventApi[]
   delivery_events?: DeliveryEventApi[]
@@ -113,6 +116,9 @@ function mapOrder(item: OrderApiItem): Order {
     item.note ?? '',
     item.deliveryTrackingCode ?? '',
     item.deliveryCarrier ?? 'internal',
+    item.shipping_name ?? '',
+    item.shipping_phone ?? '',
+    item.shipping_address ?? '',
     (item.items ?? []).map(
       (line) =>
         new OrderItem(

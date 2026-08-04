@@ -34,6 +34,7 @@ func newTestServer(t *testing.T) http.Handler {
 	productRepo := cataloginfra.NewInMemoryProductRepository()
 	orderRepo := orderinginfra.NewInMemoryOrderRepository()
 	users := identityinfra.NewInMemoryAccountRepository()
+	addresses := identityinfra.NewInMemoryAddressRepository()
 	merchants := identityinfra.NewInMemoryAccountRepository()
 	admins := identityinfra.NewInMemoryAccountRepository()
 	hasher := identityinfra.NewBcryptPasswordHasher()
@@ -82,6 +83,11 @@ func newTestServer(t *testing.T) http.Handler {
 			identitycommands.NewCreateMerchantHandler(merchants, hasher),
 			identitycommands.NewUpdateMerchantHandler(merchants, hasher),
 			identitycommands.NewDeleteMerchantHandler(merchants),
+			identityqueries.NewListUserAddressesHandler(addresses),
+			identityqueries.NewGetUserAddressHandler(addresses),
+			identitycommands.NewCreateUserAddressHandler(addresses),
+			identitycommands.NewUpdateUserAddressHandler(addresses),
+			identitycommands.NewDeleteUserAddressHandler(addresses),
 		),
 		Ordering: orderingpres.NewOrderingHandler(
 			orderingqueries.NewListOrdersHandler(orderRepo),

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/modules/auth/presentation/AuthProvider'
+import { AddressList } from './AddressList'
 import styles from './ProfilePage.module.css'
 
 export function ProfilePage(): JSX.Element {
@@ -75,6 +76,7 @@ export function ProfilePage(): JSX.Element {
           {pending ? 'Đang lưu…' : 'Lưu thay đổi'}
         </button>
       </form>
+      <AddressList />
     </section>
   )
 }

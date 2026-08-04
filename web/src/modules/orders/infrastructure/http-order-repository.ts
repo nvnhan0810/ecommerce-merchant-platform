@@ -38,6 +38,9 @@ type OrderApiItem = {
   note: string
   deliveryTrackingCode?: string
   deliveryCarrier?: string
+  shipping_name?: string
+  shipping_phone?: string
+  shipping_address?: string
   items: OrderItemApi[]
   delivery_events?: DeliveryEventApi[]
   history?: unknown[]
@@ -56,6 +59,9 @@ function mapOrder(item: OrderApiItem): Order {
     item.note ?? '',
     item.deliveryTrackingCode ?? '',
     item.deliveryCarrier ?? 'internal',
+    item.shipping_name ?? '',
+    item.shipping_phone ?? '',
+    item.shipping_address ?? '',
     (item.items ?? []).map(
       (line) =>
         new OrderItem(
@@ -110,11 +116,14 @@ export class HttpOrderRepository implements OrderRepository {
     return mapOrder(body.data)
   }
 
-  async create(note: string, items: CreateOrderItemInput[]): Promise<Order[]> {
+  async create(note: string, items: CreateOrderItemInput[], shippingName: string, shippingPhone: string, shippingAddress: string): Promise<Order[]> {
     const res = await apiFetch('/api/v1/orders', {
       method: 'POST',
       body: JSON.stringify({
         note,
+        shipping_name: shippingName,
+        shipping_phone: shippingPhone,
+        shipping_address: shippingAddress,
         items: items.map((item) => ({
           product_id: item.productId,
           quantity: item.quantity,

@@ -179,8 +179,11 @@ func (h *OrderingHandler) UpdateMerchantOrderStatus(w http.ResponseWriter, r *ht
 }
 
 type createOrderBody struct {
-	Note  string `json:"note"`
-	Items []struct {
+	Note            string `json:"note"`
+	ShippingName    string `json:"shipping_name"`
+	ShippingPhone   string `json:"shipping_phone"`
+	ShippingAddress string `json:"shipping_address"`
+	Items           []struct {
 		ProductID string `json:"product_id"`
 		Quantity  int    `json:"quantity"`
 	} `json:"items"`
@@ -205,10 +208,13 @@ func (h *OrderingHandler) CreateUserOrder(w http.ResponseWriter, r *http.Request
 		})
 	}
 	created, err := h.create.Handle(r.Context(), commands.CreateOrderCommand{
-		UserID: userID,
-		Note:   body.Note,
-		Items:  items,
-		Actor:  actorFromRequest(r),
+		UserID:          userID,
+		Note:            body.Note,
+		ShippingName:    body.ShippingName,
+		ShippingPhone:   body.ShippingPhone,
+		ShippingAddress: body.ShippingAddress,
+		Items:           items,
+		Actor:           actorFromRequest(r),
 	})
 	if err != nil {
 		writeOrderingError(w, err)

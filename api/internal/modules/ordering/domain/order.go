@@ -217,6 +217,9 @@ type Order struct {
 	Note                 string
 	DeliveryTrackingCode string
 	DeliveryCarrier      string
+	ShippingName         string
+	ShippingPhone        string
+	ShippingAddress      string
 	Items                []OrderItem
 	History              []OrderEvent
 	DeliveryEvents       []DeliveryEvent
@@ -558,7 +561,7 @@ func ParseOrderCode(raw string) (string, error) {
 	return code, nil
 }
 
-func NewOrder(userID, merchantID, currency, note string, lines []OrderLineInput) (Order, error) {
+func NewOrder(userID, merchantID, currency, note, shippingName, shippingPhone, shippingAddress string, lines []OrderLineInput) (Order, error) {
 	userID = strings.TrimSpace(userID)
 	merchantID = strings.TrimSpace(merchantID)
 	if userID == "" {
@@ -611,20 +614,23 @@ func NewOrder(userID, merchantID, currency, note string, lines []OrderLineInput)
 		total += lineTotal
 	}
 
-	return Order{
-		ID:              NewOrderID(),
-		Code:            code,
-		UserID:          userID,
-		MerchantID:      merchantID,
-		Status:          StatusNew,
-		Currency:        currency,
-		TotalCents:      total,
-		Note:            strings.TrimSpace(note),
-		DeliveryCarrier: DefaultDeliveryCarrier,
-		Items:           items,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}, nil
+		return Order{
+			ID:              NewOrderID(),
+			Code:            code,
+			UserID:          userID,
+			MerchantID:      merchantID,
+			Status:          StatusNew,
+			Currency:        currency,
+			TotalCents:      total,
+			Note:            strings.TrimSpace(note),
+			DeliveryCarrier: DefaultDeliveryCarrier,
+			ShippingName:    strings.TrimSpace(shippingName),
+			ShippingPhone:   strings.TrimSpace(shippingPhone),
+			ShippingAddress: strings.TrimSpace(shippingAddress),
+			Items:           items,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}, nil
 }
 
 type OrderRepository interface {

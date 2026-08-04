@@ -112,6 +112,11 @@ async function onSubmit(): Promise<void> {
       <div v-if="selectedOrder" class="current">
         <OrderStatusBadge :status="selectedOrder.status" :label="selectedOrder.statusLabel" />
         <span class="mono">{{ selectedOrder.deliveryTrackingCode || 'Chưa có mã vận đơn' }}</span>
+        <div v-if="selectedOrder.shippingName" class="shipping-info">
+          Giao đến: <strong>{{ selectedOrder.shippingName }}</strong> - {{ selectedOrder.shippingPhone }}
+          <br />
+          {{ selectedOrder.shippingAddress }}
+        </div>
       </div>
 
       <label>
@@ -215,6 +220,17 @@ select {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
   letter-spacing: 0.03em;
   color: #334155;
+}
+
+.shipping-info {
+  width: 100%;
+  font-size: 0.9rem;
+  color: #475569;
+  background: #f8fafc;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  margin-top: 0.25rem;
 }
 
 .primary {

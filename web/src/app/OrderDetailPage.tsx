@@ -83,6 +83,12 @@ export function OrderDetailPage(): JSX.Element {
             </div>
           </div>
 
+          <div className={styles.addressBox}>
+            <h3 className={styles.sectionTitle}>Địa chỉ nhận hàng</h3>
+            <p><strong>{data.shippingName || '—'}</strong> - {data.shippingPhone || '—'}</p>
+            <p>{data.shippingAddress || '—'}</p>
+          </div>
+
           <div className={styles.tabs}>
             <button
               type="button"

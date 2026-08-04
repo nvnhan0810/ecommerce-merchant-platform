@@ -40,25 +40,28 @@ func (r *PostgresOrderRepository) Save(order domain.Order) error {
 		carrier = domain.DefaultDeliveryCarrier
 	}
 
-	_, err = tx.Exec(ctx, `
-		INSERT INTO orders (
-			id, code, user_id, merchant_id, status, currency, total_cents, note,
-			delivery_tracking_code, delivery_carrier, created_at, updated_at
-		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		ON CONFLICT (id) DO UPDATE SET
-			code = EXCLUDED.code,
-			user_id = EXCLUDED.user_id,
-			merchant_id = EXCLUDED.merchant_id,
-			status = EXCLUDED.status,
-			currency = EXCLUDED.currency,
-			total_cents = EXCLUDED.total_cents,
-			note = EXCLUDED.note,
-			delivery_tracking_code = EXCLUDED.delivery_tracking_code,
-			delivery_carrier = EXCLUDED.delivery_carrier,
-			updated_at = EXCLUDED.updated_at
-	`, order.ID, order.Code, order.UserID, order.MerchantID, order.Status, order.Currency,
-		order.TotalCents, order.Note, tracking, carrier, order.CreatedAt, order.UpdatedAt)
+		_, err = tx.Exec(ctx, `
+			INSERT INTO orders (
+				id, code, user_id, merchant_id, status, currency, total_cents, note,
+				delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			ON CONFLICT (id) DO UPDATE SET
+				code = EXCLUDED.code,
+				user_id = EXCLUDED.user_id,
+				merchant_id = EXCLUDED.merchant_id,
+				status = EXCLUDED.status,
+				currency = EXCLUDED.currency,
+				total_cents = EXCLUDED.total_cents,
+				note = EXCLUDED.note,
+				delivery_tracking_code = EXCLUDED.delivery_tracking_code,
+				delivery_carrier = EXCLUDED.delivery_carrier,
+				shipping_name = EXCLUDED.shipping_name,
+				shipping_phone = EXCLUDED.shipping_phone,
+				shipping_address = EXCLUDED.shipping_address,
+				updated_at = EXCLUDED.updated_at
+		`, order.ID, order.Code, order.UserID, order.MerchantID, order.Status, order.Currency,
+			order.TotalCents, order.Note, tracking, carrier, order.ShippingName, order.ShippingPhone, order.ShippingAddress, order.CreatedAt, order.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -124,7 +127,7 @@ func (r *PostgresOrderRepository) FindByID(id domain.OrderID) (domain.Order, err
 
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-		       delivery_tracking_code, delivery_carrier, created_at, updated_at
+		       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id)
 	return r.hydrate(ctx, row)
@@ -140,7 +143,7 @@ func (r *PostgresOrderRepository) FindByCode(code string) (domain.Order, error) 
 
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-		       delivery_tracking_code, delivery_carrier, created_at, updated_at
+		       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
 		FROM orders WHERE code = $1
 	`, parsed)
 	return r.hydrate(ctx, row)
@@ -156,7 +159,7 @@ func (r *PostgresOrderRepository) FindByDeliveryTrackingCode(code string) (domai
 
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-		       delivery_tracking_code, delivery_carrier, created_at, updated_at
+		       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
 		FROM orders WHERE delivery_tracking_code = $1
 	`, code)
 	return r.hydrate(ctx, row)
@@ -204,10 +207,10 @@ func (r *PostgresOrderRepository) List(limit, offset int) ([]domain.Order, error
 		limit = 50
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-		       delivery_tracking_code, delivery_carrier, created_at, updated_at
-		FROM orders
-		ORDER BY created_at DESC
+			SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+			       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+			FROM orders
+			ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
@@ -224,10 +227,10 @@ func (r *PostgresOrderRepository) ListByMerchant(merchantID string, limit, offse
 		limit = 50
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-		       delivery_tracking_code, delivery_carrier, created_at, updated_at
-		FROM orders
-		WHERE merchant_id = $1
+			SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+			       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+			FROM orders
+			WHERE merchant_id = $1
 		ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3
 	`, merchantID, limit, offset)
@@ -245,10 +248,10 @@ func (r *PostgresOrderRepository) ListByUser(userID string, limit, offset int) (
 		limit = 50
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
-		       delivery_tracking_code, delivery_carrier, created_at, updated_at
-		FROM orders
-		WHERE user_id = $1
+			SELECT id, code, user_id, merchant_id, status, currency, total_cents, note,
+			       delivery_tracking_code, delivery_carrier, shipping_name, shipping_phone, shipping_address, created_at, updated_at
+			FROM orders
+			WHERE user_id = $1
 		ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3
 	`, userID, limit, offset)
@@ -427,14 +430,14 @@ type scannable interface {
 
 func scanOrder(row scannable) (domain.Order, error) {
 	var (
-		id, code, userID, merchantID, status, currency, note, carrier string
-		tracking                                                      *string
-		total                                                         int64
-		createdAt, updatedAt                                          time.Time
+		id, code, userID, merchantID, status, currency, note, carrier, shipName, shipPhone, shipAddr string
+		tracking                                                                                     *string
+		total                                                                                        int64
+		createdAt, updatedAt                                                                         time.Time
 	)
 	if err := row.Scan(
 		&id, &code, &userID, &merchantID, &status, &currency, &total, &note,
-		&tracking, &carrier, &createdAt, &updatedAt,
+		&tracking, &carrier, &shipName, &shipPhone, &shipAddr, &createdAt, &updatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Order{}, domain.ErrOrderNotFound
@@ -463,6 +466,9 @@ func scanOrder(row scannable) (domain.Order, error) {
 		Note:                 note,
 		DeliveryTrackingCode: trackingCode,
 		DeliveryCarrier:      carrier,
+		ShippingName:         shipName,
+		ShippingPhone:        shipPhone,
+		ShippingAddress:      shipAddr,
 		CreatedAt:            createdAt.UTC(),
 		UpdatedAt:            updatedAt.UTC(),
 	}, nil

@@ -16,7 +16,7 @@ export class GetMyOrderUseCase {
 
 export class CreateOrderUseCase {
   constructor(private readonly repo: OrderRepository) {}
-  execute(note: string, items: CreateOrderItemInput[]): Promise<Order[]> {
-    return this.repo.create(note, items)
+  execute(note: string, items: CreateOrderItemInput[], shippingName: string, shippingPhone: string, shippingAddress: string): Promise<Order[]> {
+    return this.repo.create(note, items, shippingName, shippingPhone, shippingAddress)
   }
 }

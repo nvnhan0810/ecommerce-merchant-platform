@@ -52,6 +52,7 @@ func main() {
 	productRepo := cataloginfra.NewPostgresProductRepository(pool)
 	orderRepo := orderinginfra.NewPostgresOrderRepository(pool)
 	userRepo := identityinfra.NewPostgresUserRepository(pool)
+	addressRepo := postgres.NewUserAddressRepository(pool)
 	merchantRepo := identityinfra.NewPostgresMerchantRepository(pool)
 	adminRepo := identityinfra.NewPostgresAdminRepository(pool)
 	hasher := identityinfra.NewBcryptPasswordHasher()
@@ -107,6 +108,11 @@ func main() {
 			identitycommands.NewCreateMerchantHandler(merchantRepo, hasher),
 			identitycommands.NewUpdateMerchantHandler(merchantRepo, hasher),
 			identitycommands.NewDeleteMerchantHandler(merchantRepo),
+			identityqueries.NewListUserAddressesHandler(addressRepo),
+			identityqueries.NewGetUserAddressHandler(addressRepo),
+			identitycommands.NewCreateUserAddressHandler(addressRepo),
+			identitycommands.NewUpdateUserAddressHandler(addressRepo),
+			identitycommands.NewDeleteUserAddressHandler(addressRepo),
 		),
 		Ordering: orderingpres.NewOrderingHandler(
 			orderingqueries.NewListOrdersHandler(orderRepo),

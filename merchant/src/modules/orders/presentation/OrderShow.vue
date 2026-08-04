@@ -136,6 +136,12 @@ async function onCancel(): Promise<void> {
         </div>
       </div>
 
+      <div class="address-box">
+        <h3>Địa chỉ nhận hàng</h3>
+        <p><strong>{{ order.shippingName || '—' }}</strong> - {{ order.shippingPhone || '—' }}</p>
+        <p>{{ order.shippingAddress || '—' }}</p>
+      </div>
+
       <div class="tabs">
         <button
           type="button"
@@ -329,7 +335,28 @@ async function onCancel(): Promise<void> {
   padding: 1.25rem;
   border-radius: 10px;
   border: 1px solid #e2e8f0;
+  margin-bottom: 1rem;
+}
+
+.address-box {
+  background: #f8fafc;
+  padding: 1.25rem;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
   margin-bottom: 2rem;
+}
+
+.address-box h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.address-box p {
+  margin: 0.25rem 0;
+  color: #0f172a;
 }
 
 .meta-item {
