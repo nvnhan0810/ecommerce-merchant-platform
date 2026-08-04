@@ -36,6 +36,12 @@ const resolvedLabel = (): string => {
   border-color: #bfdbfe;
 }
 
+.badge--awaiting_payment {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
 .badge--paid {
   background: #ecfeff;
   color: #0e7490;

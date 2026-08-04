@@ -25,6 +25,8 @@ function logout(): void {
         <RouterLink to="/categories">Categories</RouterLink>
         <RouterLink to="/products">Products</RouterLink>
         <RouterLink to="/orders">Orders</RouterLink>
+        <RouterLink to="/payments">Payments</RouterLink>
+        <RouterLink to="/payment-callbacks">Payment IPN</RouterLink>
         <RouterLink to="/delivery-simulator">Delivery sim</RouterLink>
       </nav>
       <div class="footer">

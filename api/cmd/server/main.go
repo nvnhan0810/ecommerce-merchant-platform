@@ -52,6 +52,7 @@ func main() {
 	productRepo := cataloginfra.NewPostgresProductRepository(pool)
 	categoryRepo := cataloginfra.NewPostgresCategoryRepository(pool)
 	orderRepo := orderinginfra.NewPostgresOrderRepository(pool)
+	paymentRepo := orderinginfra.NewPostgresPaymentRepository(pool)
 	userRepo := identityinfra.NewPostgresUserRepository(pool)
 	addressRepo := postgres.NewUserAddressRepository(pool)
 	geoRepo := postgres.NewGeoRepository(pool)
@@ -136,9 +137,17 @@ func main() {
 			orderingqueries.NewListOrdersHandler(orderRepo),
 			orderingqueries.NewGetOrderHandler(orderRepo),
 			orderingcommands.NewUpdateOrderStatusHandler(orderRepo),
-			orderingcommands.NewCreateOrderHandler(orderRepo, productRepo),
+			orderingcommands.NewCreateOrderHandler(orderRepo, productRepo, paymentRepo, cfg.PublicAPIBase),
+			orderingcommands.NewRepayOrderHandler(orderRepo, paymentRepo, cfg.PublicAPIBase),
 			orderingcommands.NewApplyDeliveryEventHandler(orderRepo),
+			orderingqueries.NewGetPaymentSettingsHandler(paymentRepo, cfg.PublicAPIBase),
+			orderingcommands.NewUpdatePaymentSettingsHandler(paymentRepo, cfg.PublicAPIBase),
+			orderingqueries.NewGetPublicPaymentMethodsHandler(paymentRepo),
+			orderingqueries.NewListPaymentCallbacksHandler(paymentRepo),
+			orderingqueries.NewGetPaymentCallbackHandler(paymentRepo),
+			orderingcommands.NewHandleOnePayCallbackHandler(paymentRepo, orderRepo),
 			cfg.DeliveryWebhookSecret,
+			cfg.WebBaseURL,
 		),
 		Tokens: tokens,
 	})

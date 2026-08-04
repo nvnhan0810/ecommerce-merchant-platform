@@ -64,6 +64,13 @@ type OrderDTO struct {
 	ShippingName         string             `json:"shipping_name"`
 	ShippingPhone        string             `json:"shipping_phone"`
 	ShippingAddress      string             `json:"shipping_address"`
+	PaymentMethod        string             `json:"payment_method"`
+	PaymentMethodLabel   string             `json:"payment_method_label"`
+	PaymentStatus        string             `json:"payment_status"`
+	PaymentStatusLabel   string             `json:"payment_status_label"`
+	PaymentID            string             `json:"payment_id,omitempty"`
+	PaidAt               *time.Time         `json:"paid_at,omitempty"`
+	CanRepay             bool               `json:"can_repay"`
 	Items                []OrderItemDTO     `json:"items"`
 	History              []OrderEventDTO    `json:"history"`
 	DeliveryEvents       []DeliveryEventDTO `json:"delivery_events"`
@@ -105,6 +112,14 @@ func ToDTOWithHistory(o domain.Order, includeHistory bool) OrderDTO {
 	if carrier == "" {
 		carrier = domain.DefaultDeliveryCarrier
 	}
+	method := o.PaymentMethod
+	if method == "" {
+		method = domain.PaymentMethodCOD
+	}
+	payStatus := o.PaymentStatus
+	if payStatus == "" {
+		payStatus = domain.PaymentStatusUnpaid
+	}
 	return OrderDTO{
 		ID:                   string(o.ID),
 		Code:                 o.Code,
@@ -120,6 +135,13 @@ func ToDTOWithHistory(o domain.Order, includeHistory bool) OrderDTO {
 		ShippingName:         o.ShippingName,
 		ShippingPhone:        o.ShippingPhone,
 		ShippingAddress:      o.ShippingAddress,
+		PaymentMethod:        string(method),
+		PaymentMethodLabel:   method.LabelVI(),
+		PaymentStatus:        string(payStatus),
+		PaymentStatusLabel:   payStatus.LabelVI(),
+		PaymentID:            string(o.PaymentID),
+		PaidAt:               o.PaidAt,
+		CanRepay:             o.CanRepay(),
 		Items:                items,
 		History:              history,
 		DeliveryEvents:       deliveryEvents,

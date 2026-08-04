@@ -27,6 +27,7 @@ type Config struct {
 
 	S3            storage.Config
 	PublicAPIBase string
+	WebBaseURL    string
 }
 
 func Load() Config {
@@ -42,6 +43,7 @@ func Load() Config {
 	}
 
 	ttlHours := getenvInt("JWT_TTL_HOURS", 24)
+	webBase := getenv("CORS_WEB", "https://ecomerce.nvnhan0810.com")
 
 	return Config{
 		HTTPAddr:               addr,
@@ -63,6 +65,7 @@ func Load() Config {
 			UsePathStyle: getenvBool("S3_USE_PATH_STYLE", true),
 		},
 		PublicAPIBase: strings.TrimRight(getenv("PUBLIC_API_BASE_URL", "https://ecomerce-api.nvnhan0810.com"), "/"),
+		WebBaseURL:    strings.TrimRight(webBase, "/"),
 	}
 }
 

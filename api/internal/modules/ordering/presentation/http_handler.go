@@ -18,12 +18,20 @@ import (
 )
 
 type OrderingHandler struct {
-	list           *queries.ListOrdersHandler
-	get            *queries.GetOrderHandler
-	updateStatus   *commands.UpdateOrderStatusHandler
-	create         *commands.CreateOrderHandler
-	applyDelivery  *commands.ApplyDeliveryEventHandler
-	webhookSecret  string
+	list                  *queries.ListOrdersHandler
+	get                   *queries.GetOrderHandler
+	updateStatus          *commands.UpdateOrderStatusHandler
+	create                *commands.CreateOrderHandler
+	repay                 *commands.RepayOrderHandler
+	applyDelivery         *commands.ApplyDeliveryEventHandler
+	getPaymentSettings    *queries.GetPaymentSettingsHandler
+	updatePaymentSettings *commands.UpdatePaymentSettingsHandler
+	getPaymentMethods     *queries.GetPublicPaymentMethodsHandler
+	listPaymentCallbacks  *queries.ListPaymentCallbacksHandler
+	getPaymentCallback    *queries.GetPaymentCallbackHandler
+	onePayCallback        *commands.HandleOnePayCallbackHandler
+	webhookSecret         string
+	webBaseURL            string
 }
 
 func NewOrderingHandler(
@@ -31,16 +39,32 @@ func NewOrderingHandler(
 	get *queries.GetOrderHandler,
 	updateStatus *commands.UpdateOrderStatusHandler,
 	create *commands.CreateOrderHandler,
+	repay *commands.RepayOrderHandler,
 	applyDelivery *commands.ApplyDeliveryEventHandler,
+	getPaymentSettings *queries.GetPaymentSettingsHandler,
+	updatePaymentSettings *commands.UpdatePaymentSettingsHandler,
+	getPaymentMethods *queries.GetPublicPaymentMethodsHandler,
+	listPaymentCallbacks *queries.ListPaymentCallbacksHandler,
+	getPaymentCallback *queries.GetPaymentCallbackHandler,
+	onePayCallback *commands.HandleOnePayCallbackHandler,
 	webhookSecret string,
+	webBaseURL string,
 ) *OrderingHandler {
 	return &OrderingHandler{
-		list:          list,
-		get:           get,
-		updateStatus:  updateStatus,
-		create:        create,
-		applyDelivery: applyDelivery,
-		webhookSecret: strings.TrimSpace(webhookSecret),
+		list:                  list,
+		get:                   get,
+		updateStatus:          updateStatus,
+		create:                create,
+		repay:                 repay,
+		applyDelivery:         applyDelivery,
+		getPaymentSettings:    getPaymentSettings,
+		updatePaymentSettings: updatePaymentSettings,
+		getPaymentMethods:     getPaymentMethods,
+		listPaymentCallbacks:  listPaymentCallbacks,
+		getPaymentCallback:    getPaymentCallback,
+		onePayCallback:        onePayCallback,
+		webhookSecret:         strings.TrimSpace(webhookSecret),
+		webBaseURL:            strings.TrimRight(strings.TrimSpace(webBaseURL), "/"),
 	}
 }
 
@@ -183,6 +207,7 @@ type createOrderBody struct {
 	ShippingName    string `json:"shipping_name"`
 	ShippingPhone   string `json:"shipping_phone"`
 	ShippingAddress string `json:"shipping_address"`
+	PaymentMethod   string `json:"payment_method"`
 	Items           []struct {
 		ProductID string `json:"product_id"`
 		Quantity  int    `json:"quantity"`
@@ -213,6 +238,9 @@ func (h *OrderingHandler) CreateUserOrder(w http.ResponseWriter, r *http.Request
 		ShippingName:    body.ShippingName,
 		ShippingPhone:   body.ShippingPhone,
 		ShippingAddress: body.ShippingAddress,
+		PaymentMethod:   body.PaymentMethod,
+		ClientIP:        clientIP(r),
+		AgainLink:       h.webBaseURL + "/",
 		Items:           items,
 		Actor:           actorFromRequest(r),
 	})
@@ -220,7 +248,196 @@ func (h *OrderingHandler) CreateUserOrder(w http.ResponseWriter, r *http.Request
 		writeOrderingError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"data": created})
+	payload := map[string]any{"data": created.Orders}
+	if created.Payment != nil {
+		payload["payment"] = created.Payment
+	}
+	writeJSON(w, http.StatusCreated, payload)
+}
+
+func (h *OrderingHandler) GetPaymentMethods(w http.ResponseWriter, r *http.Request) {
+	item, err := h.getPaymentMethods.Handle(r.Context())
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+func (h *OrderingHandler) GetPaymentSettings(w http.ResponseWriter, r *http.Request) {
+	item, err := h.getPaymentSettings.Handle(r.Context())
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+type onePayGatewayBody struct {
+	Enabled    bool   `json:"enabled"`
+	MerchantID string `json:"merchant_id"`
+	AccessCode string `json:"access_code"`
+	HashSecret string `json:"hash_secret"`
+	PaymentURL string `json:"payment_url"`
+}
+
+type paymentSettingsBody struct {
+	OnePayReturnURL     string             `json:"onepay_return_url"`
+	OnePayIPNURL        string             `json:"onepay_ipn_url"`
+	OnePayDomestic      onePayGatewayBody  `json:"onepay_domestic"`
+	OnePayInternational onePayGatewayBody  `json:"onepay_international"`
+}
+
+func (h *OrderingHandler) UpdatePaymentSettings(w http.ResponseWriter, r *http.Request) {
+	var body paymentSettingsBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	item, err := h.updatePaymentSettings.Handle(r.Context(), commands.UpdatePaymentSettingsCommand{
+		OnePayReturnURL: body.OnePayReturnURL,
+		OnePayIPNURL:    body.OnePayIPNURL,
+		OnePayDomestic: commands.OnePayGatewayInput{
+			Enabled:    body.OnePayDomestic.Enabled,
+			MerchantID: body.OnePayDomestic.MerchantID,
+			AccessCode: body.OnePayDomestic.AccessCode,
+			HashSecret: body.OnePayDomestic.HashSecret,
+			PaymentURL: body.OnePayDomestic.PaymentURL,
+		},
+		OnePayInternational: commands.OnePayGatewayInput{
+			Enabled:    body.OnePayInternational.Enabled,
+			MerchantID: body.OnePayInternational.MerchantID,
+			AccessCode: body.OnePayInternational.AccessCode,
+			HashSecret: body.OnePayInternational.HashSecret,
+			PaymentURL: body.OnePayInternational.PaymentURL,
+		},
+	})
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+func (h *OrderingHandler) RepayUserOrder(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromClaims(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	result, err := h.repay.Handle(r.Context(), commands.RepayOrderCommand{
+		OrderID:   id,
+		UserID:    userID,
+		ClientIP:  clientIP(r),
+		AgainLink: h.webBaseURL + "/",
+		Actor:     actorFromRequest(r),
+	})
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":    result.Order,
+		"payment": result.Payment,
+	})
+}
+
+func (h *OrderingHandler) OnePayReturn(w http.ResponseWriter, r *http.Request) {
+	params := commands.ParamsFromURLValues(r.URL.Query())
+	result, err := h.onePayCallback.Handle(r.Context(), commands.HandleOnePayCallbackCommand{
+		Params:     params,
+		Channel:    domain.PaymentCallbackChannelReturn,
+		HTTPMethod: r.Method,
+	})
+	status := "failed"
+	paymentID := ""
+	orderID := ""
+	if err == nil {
+		paymentID = result.Payment.ID
+		orderID = result.OrderID
+		if result.Paid {
+			status = "paid"
+		}
+	} else {
+		status = "error"
+	}
+	target := h.webBaseURL + "/orders/payment/result?status=" + status
+	if paymentID != "" {
+		target += "&payment_id=" + paymentID
+	}
+	if orderID != "" {
+		target += "&order_id=" + orderID
+	}
+	http.Redirect(w, r, target, http.StatusFound)
+}
+
+func (h *OrderingHandler) OnePayIPN(w http.ResponseWriter, r *http.Request) {
+	params := commands.ParamsFromURLValues(r.URL.Query())
+	if r.Method == http.MethodPost {
+		_ = r.ParseForm()
+		for k, vs := range r.Form {
+			if len(vs) > 0 {
+				params[k] = vs[0]
+			}
+		}
+	}
+	result, err := h.onePayCallback.Handle(r.Context(), commands.HandleOnePayCallbackCommand{
+		Params:     params,
+		Channel:    domain.PaymentCallbackChannelIPN,
+		HTTPMethod: r.Method,
+	})
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":    result.Payment,
+		"paid":    result.Paid,
+		"message": "response received",
+	})
+}
+
+func (h *OrderingHandler) ListPaymentCallbacks(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	items, err := h.listPaymentCallbacks.Handle(r.Context(), queries.ListPaymentCallbacksQuery{
+		Provider:    strings.TrimSpace(r.URL.Query().Get("provider")),
+		Channel:     strings.TrimSpace(r.URL.Query().Get("channel")),
+		MerchTxnRef: strings.TrimSpace(r.URL.Query().Get("merch_txn_ref")),
+		Limit:       limit,
+		Offset:      offset,
+	})
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
+}
+
+func (h *OrderingHandler) GetPaymentCallback(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	item, err := h.getPaymentCallback.Handle(r.Context(), id)
+	if err != nil {
+		writeOrderingError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+func clientIP(r *http.Request) string {
+	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[0])
+	}
+	if rip := strings.TrimSpace(r.Header.Get("X-Real-IP")); rip != "" {
+		return rip
+	}
+	host := r.RemoteAddr
+	if i := strings.LastIndex(host, ":"); i >= 0 {
+		host = host[:i]
+	}
+	return strings.Trim(host, "[]")
 }
 
 func (h *OrderingHandler) ListUserOrders(w http.ResponseWriter, r *http.Request) {
@@ -374,6 +591,8 @@ func writeOrderingError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	switch {
 	case errors.Is(err, domain.ErrOrderNotFound),
+		errors.Is(err, domain.ErrPaymentNotFound),
+		errors.Is(err, domain.ErrPaymentCallbackNotFound),
 		errors.Is(err, catalogdomain.ErrProductNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, domain.ErrInvalidOrderID),
@@ -389,10 +608,17 @@ func writeOrderingError(w http.ResponseWriter, err error) {
 		errors.Is(err, domain.ErrUserRequired),
 		errors.Is(err, domain.ErrInvalidDeliveryStatus),
 		errors.Is(err, domain.ErrDeliveryLookupRequired),
+		errors.Is(err, domain.ErrInvalidPaymentMethod),
+		errors.Is(err, domain.ErrInvalidPaymentStatus),
+		errors.Is(err, domain.ErrInvalidOnePayHash),
+		errors.Is(err, domain.ErrOnePayNotConfigured),
+		errors.Is(err, domain.ErrOnePayDisabled),
+		errors.Is(err, domain.ErrOrderNotRepayable),
 		errors.Is(err, catalogdomain.ErrInvalidProductID),
 		errors.Is(err, catalogdomain.ErrInvalidQuantity):
 		status = http.StatusBadRequest
-	case errors.Is(err, domain.ErrDeliveryEventDuplicate):
+	case errors.Is(err, domain.ErrDeliveryEventDuplicate),
+		errors.Is(err, domain.ErrPaymentAlreadyHandled):
 		status = http.StatusConflict
 	case errors.Is(err, catalogdomain.ErrInsufficientStock):
 		status = http.StatusConflict

@@ -8,6 +8,7 @@ import { LoginPage } from './app/LoginPage'
 import { MerchantPage } from './app/MerchantPage'
 import { OrderDetailPage } from './app/OrderDetailPage'
 import { OrdersPage } from './app/OrdersPage'
+import { PaymentResultPage } from './app/PaymentResultPage'
 import { ProductDetailPage } from './app/ProductDetailPage'
 import { ProfilePage } from './app/ProfilePage'
 import { AddressesPage } from './app/AddressesPage'
@@ -22,6 +23,7 @@ export default function App(): JSX.Element {
         <Route path="cart" element={<CartPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="orders" element={<OrdersPage />} />
+        <Route path="orders/payment/result" element={<PaymentResultPage />} />
         <Route path="orders/:id" element={<OrderDetailPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="addresses" element={<AddressesPage />} />

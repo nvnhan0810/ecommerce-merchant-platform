@@ -1,4 +1,5 @@
 export type OrderStatus =
+  | 'awaiting_payment'
   | 'new'
   | 'paid'
   | 'confirmed'
@@ -12,6 +13,7 @@ export type OrderStatus =
 export type OrderEventType = 'created' | 'status_changed' | 'cancelled'
 
 export const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
+  { value: 'awaiting_payment', label: 'Chờ thanh toán' },
   { value: 'new', label: 'Mới' },
   { value: 'paid', label: 'Đã thanh toán' },
   { value: 'confirmed', label: 'Đã xác nhận' },

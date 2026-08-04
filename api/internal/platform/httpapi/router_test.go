@@ -33,6 +33,7 @@ func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
 	productRepo := cataloginfra.NewInMemoryProductRepository()
 	orderRepo := orderinginfra.NewInMemoryOrderRepository()
+	paymentRepo := orderinginfra.NewInMemoryPaymentRepository()
 	users := identityinfra.NewInMemoryAccountRepository()
 	addresses := identityinfra.NewInMemoryAddressRepository()
 	geo := identityinfra.NewInMemoryGeoRepository()
@@ -56,6 +57,8 @@ func newTestServer(t *testing.T) http.Handler {
 			Env:                   "test",
 			CORSOrigins:           []string{"http://localhost:5173"},
 			DeliveryWebhookSecret: "test-delivery-webhook-secret",
+			PublicAPIBase:         base,
+			WebBaseURL:            "https://ecomerce.nvnhan0810.com",
 		},
 		Health: healthpres.NewHealthHandler("test"),
 		Catalog: catalogpres.NewCatalogHandler(
@@ -107,9 +110,17 @@ func newTestServer(t *testing.T) http.Handler {
 			orderingqueries.NewListOrdersHandler(orderRepo),
 			orderingqueries.NewGetOrderHandler(orderRepo),
 			orderingcommands.NewUpdateOrderStatusHandler(orderRepo),
-			orderingcommands.NewCreateOrderHandler(orderRepo, productRepo),
+			orderingcommands.NewCreateOrderHandler(orderRepo, productRepo, paymentRepo, base),
+			orderingcommands.NewRepayOrderHandler(orderRepo, paymentRepo, base),
 			orderingcommands.NewApplyDeliveryEventHandler(orderRepo),
+			orderingqueries.NewGetPaymentSettingsHandler(paymentRepo, base),
+			orderingcommands.NewUpdatePaymentSettingsHandler(paymentRepo, base),
+			orderingqueries.NewGetPublicPaymentMethodsHandler(paymentRepo),
+			orderingqueries.NewListPaymentCallbacksHandler(paymentRepo),
+			orderingqueries.NewGetPaymentCallbackHandler(paymentRepo),
+			orderingcommands.NewHandleOnePayCallbackHandler(paymentRepo, orderRepo),
 			"test-delivery-webhook-secret",
+			"https://ecomerce.nvnhan0810.com",
 		),
 		Tokens: tokens,
 	})

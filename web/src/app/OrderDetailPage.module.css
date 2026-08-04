@@ -29,6 +29,43 @@
   margin-bottom: 1.5rem;
 }
 
+.repayBox {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.repayBox p {
+  margin: 0;
+  color: #9a3412;
+  line-height: 1.45;
+}
+
+.repayError {
+  color: #b91c1c !important;
+}
+
+.repayBtn {
+  justify-self: start;
+  border: none;
+  border-radius: 10px;
+  background: #0f766e;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.65rem 0.95rem;
+  cursor: pointer;
+}
+
+.repayBtn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .code {
   margin: 0;
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
