@@ -99,35 +99,6 @@ func (h *OrderingHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": item})
 }
 
-type updateStatusBody struct {
-	Status string `json:"status"`
-	Reason string `json:"reason"`
-}
-
-func (h *OrderingHandler) UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
-	id, err := domain.ParseOrderID(chi.URLParam(r, "id"))
-	if err != nil {
-		writeOrderingError(w, err)
-		return
-	}
-	var body updateStatusBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
-		return
-	}
-	item, err := h.updateStatus.Handle(r.Context(), commands.UpdateOrderStatusCommand{
-		ID:     id,
-		Status: strings.TrimSpace(body.Status),
-		Reason: strings.TrimSpace(body.Reason),
-		Actor:  actorFromRequest(r),
-	})
-	if err != nil {
-		writeOrderingError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": item})
-}
-
 func (h *OrderingHandler) ListMerchantOrders(w http.ResponseWriter, r *http.Request) {
 	merchantID, ok := merchantIDFromClaims(r)
 	if !ok {
@@ -170,6 +141,11 @@ func (h *OrderingHandler) GetMerchantOrder(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": item})
+}
+
+type updateStatusBody struct {
+	Status string `json:"status"`
+	Reason string `json:"reason"`
 }
 
 func (h *OrderingHandler) UpdateMerchantOrderStatus(w http.ResponseWriter, r *http.Request) {

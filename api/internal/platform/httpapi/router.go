@@ -99,7 +99,6 @@ func NewRouter(deps Dependencies) http.Handler {
 			admin.Delete("/products/{id}/image", deps.Catalog.DeleteProductImage)
 			admin.Get("/orders", deps.Ordering.ListOrders)
 			admin.Get("/orders/{id}", deps.Ordering.GetOrder)
-			admin.Patch("/orders/{id}/status", deps.Ordering.UpdateOrderStatus)
 			admin.Post("/orders/{id}/delivery-simulate", deps.Ordering.SimulateDelivery)
 		})
 	})
